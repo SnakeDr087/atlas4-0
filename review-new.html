@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — New Review</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .form-shell { display: grid; grid-template-columns: 200px 1fr; gap: 28px; align-items: start; }
+    .section-nav { position: sticky; top: calc(var(--topbar-height) + 20px); }
+    .section-nav-item {
+      display: flex; align-items: center; gap: 9px; padding: 8px 12px;
+      font-size: 12px; font-weight: 500; color: var(--text-muted);
+      border-left: 2px solid transparent; cursor: pointer; transition: all var(--transition);
+      border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    }
+    .section-nav-item:hover { color: var(--text-secondary); border-left-color: var(--border); }
+    .section-nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-dim); }
+    .section-nav-item .nav-num {
+      width: 20px; height: 20px; border-radius: 50%; background: var(--bg-overlay);
+      display: flex; align-items: center; justify-content: center; font-size: 10px;
+      font-family: var(--font-mono); flex-shrink: 0;
+    }
+    .section-nav-item.active .nav-num { background: var(--accent); color: white; }
+    .section-nav-item.complete .nav-num {
+      background: var(--success-dim); color: var(--success);
+    }
+    .form-section { scroll-margin-top: calc(var(--topbar-height) + 20px); }
+    .form-section + .form-section { margin-top: 24px; }
+    .section-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 16px; padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent-dim); color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size: 12px; font-weight: 600; flex-shrink: 0;
+    }
+    .section-title { font-family: var(--font-heading); font-size: 15px; font-weight: 700; }
+    .kpi-checklist { display: flex; flex-direction: column; gap: 8px; }
+    .kpi-row {
+      display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px;
+      padding: 10px 14px; background: var(--bg-base); border: 1px solid var(--border);
+      border-radius: var(--border-radius); transition: border-color var(--transition);
+    }
+    .kpi-row:hover { border-color: var(--border-focus); }
+    .kpi-row-text { font-size: 13px; color: var(--text-secondary); }
+    .kpi-btns { display: flex; gap: 4px; }
+    .kpi-opt {
+      padding: 4px 9px; border-radius: var(--border-radius); font-size: 11px;
+      font-weight: 600; cursor: pointer; border: 1px solid var(--border);
+      background: var(--bg-elevated); color: var(--text-muted); transition: all var(--transition);
+      white-space: nowrap;
+    }
+    .kpi-opt:hover { border-color: var(--border-focus); color: var(--text-primary); }
+    .kpi-opt.sel-observed     { background: var(--success-dim); color: var(--success); border-color: rgba(16,185,129,0.35); }
+    .kpi-opt.sel-not_observed { background: var(--danger-dim);  color: var(--danger);  border-color: rgba(239,68,68,0.35); }
+    .kpi-opt.sel-na           { background: var(--bg-overlay);  color: var(--text-muted); border-color: var(--border); }
+    .safety-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      background: var(--bg-base); border: 1px solid var(--border);
+      border-radius: var(--border-radius); cursor: pointer; transition: all var(--transition);
+    }
+    .safety-item:hover { border-color: var(--border-focus); }
+    .safety-item input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; accent-color: var(--success); }
+    .safety-item label { font-size: 13px; color: var(--text-secondary); cursor: pointer; flex: 1; }
+    .outcome-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+    .outcome-opt { cursor: pointer; }
+    .outcome-opt input { display: none; }
+    .outcome-card {
+      padding: 12px 14px; border: 1px solid var(--border);
+      border-radius: var(--border-radius); background: var(--bg-base); transition: all var(--transition);
+    }
+    .outcome-opt input:checked + .outcome-card { border-color: var(--outcome-border, var(--accent)); background: var(--outcome-bg, var(--accent-dim)); }
+    .outcome-name { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+    .outcome-desc { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+    .outcome-opt input:checked + .outcome-card .outcome-name { color: var(--text-primary); }
+    .training-notice {
+      display: none; margin-top: 12px;
+      padding: 12px 14px; background: rgba(139,92,246,0.08);
+      border: 1px solid rgba(139,92,246,0.25); border-radius: var(--border-radius);
+      font-size: 12px; color: #a78bfa;
+    }
+    .backup-tag {
+      display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+      background: var(--bg-overlay); border: 1px solid var(--border);
+      border-radius: 20px; font-size: 12px; color: var(--text-secondary); margin: 3px;
+    }
+    .backup-tag button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+    .backup-tag button:hover { color: var(--danger); }
+    #backup-tags { min-height: 36px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+    .form-actions {
+      position: sticky; bottom: 0; background: var(--bg-surface);
+      border-top: 1px solid var(--border); padding: 16px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      margin: 0 -28px; z-index: 10;
+    }
+  
+    /* ── Collapsible checklist panels ── */
+    .cl-panel{border:1px solid var(--border);border-radius:var(--border-radius-lg);overflow:hidden;margin-top:20px;}
+    .cl-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-elevated);cursor:pointer;user-select:none;transition:background .15s;}
+    .cl-header:hover{background:#f0f0f5;}
+    .cl-title-danger{font-size:13px;font-weight:700;color:var(--danger);}
+    .cl-title-normal{font-size:13px;font-weight:700;color:var(--text-primary);}
+    .cl-hint{font-size:11px;color:var(--text-muted);font-weight:400;margin-left:6px;}
+    .cl-badge{display:none;margin-left:8px;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;}
+    .cl-badge.show{display:inline-block;}
+    .cl-badge-danger{background:#fee2e2;color:var(--danger);}
+    .cl-badge-accent{background:var(--accent-dim);color:var(--accent);}
+    .cl-chevron{color:var(--text-muted);transition:transform .2s;font-size:11px;}
+    .cl-chevron.open{transform:rotate(180deg);}
+    .cl-body{display:none;padding:14px 16px;border-top:1px solid var(--border);}
+    .cl-body.open{display:block;}
+    .cl-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+    .cl-item{display:flex;align-items:flex-start;gap:8px;padding:7px 10px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;transition:border-color .15s,background .15s;}
+    .cl-item:hover{border-color:var(--border-focus);}
+    .cl-item input[type=checkbox]{width:14px;height:14px;flex-shrink:0;cursor:pointer;margin-top:2px;}
+    .cl-item span{font-size:12px;color:var(--text-secondary);line-height:1.35;cursor:pointer;}
+    .cl-item.s-checked{border-color:var(--danger)!important;background:#fff5f5;}
+    .cl-item.s-checked span{color:var(--danger);font-weight:600;}
+    .cl-item.d-checked{border-color:var(--accent)!important;background:var(--accent-dim);}
+    .cl-item.d-checked span{color:var(--accent);font-weight:600;}
+    .cl-cat{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--danger);margin:10px 0 5px;grid-column:1/-1;}
+    .cl-cat:first-child{margin-top:0;}
+
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content" style="padding-bottom:0;">
+
+      <div class="page-header">
+        <h1>New BWC Review</h1>
+        <p>Complete all six sections. Internal notes are never printed or shared.</p>
+      </div>
+
+      <div class="form-shell">
+
+        <!-- Section nav -->
+        <nav class="section-nav">
+          <div class="section-nav-item active" data-section="s1" onclick="scrollTo('s1')">
+            <span class="nav-num">1</span> Review Details
+          </div>
+          <div class="section-nav-item" data-section="s2" onclick="scrollTo('s2')">
+            <span class="nav-num">2</span> Location
+          </div>
+          <div class="section-nav-item" data-section="s3" onclick="scrollTo('s3')">
+            <span class="nav-num">3</span> Personnel
+          </div>
+          <div class="section-nav-item" data-section="s4" onclick="scrollTo('s4')">
+            <span class="nav-num">4</span> Incident Analysis
+          </div>
+          <div class="section-nav-item" data-section="s5" onclick="scrollTo('s5')">
+            <span class="nav-num">5</span> Follow-Up
+          </div>
+          <div class="section-nav-item" data-section="s6" onclick="scrollTo('s6')">
+            <span class="nav-num">6</span> Notes
+          </div>
+        </nav>
+
+        <!-- Form body -->
+        <div id="form-body">
+
+          <!-- SECTION 1 — Review Details -->
+          <div class="card form-section" id="s1">
+            <div class="section-header">
+              <div class="section-num">1</div>
+              <div class="section-title">Review Details</div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Police Case # <span style="font-size:11px;color:var(--text-muted);">(agency dispatch/records number)</span></label>
+                <input type="text" id="police-case-number" placeholder="e.g. 2024-00123">
+              </div>
+              <div class="form-group">
+                <label>ATLAS Case #</label>
+                <input type="text" value="Auto-generated on submit" class="input-readonly" readonly>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Review Date <span class="required">*</span></label>
+                <input type="date" id="review-date" required>
+              </div>
+              <div class="form-group">
+                <label>Incident Date <span class="required">*</span></label>
+                <input type="date" id="incident-date" required>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Recording Start Time</label>
+                <input type="time" id="recording-start">
+              </div>
+              <div class="form-group">
+                <label>Recording End Time</label>
+                <input type="time" id="recording-end">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Department / Agency</label>
+              <input type="text" id="agency-name" class="input-readonly" readonly>
+            </div>
+          </div>
+
+          <!-- SECTION 2 — Incident Location -->
+          <div class="card form-section" id="s2">
+            <div class="section-header">
+              <div class="section-num">2</div>
+              <div class="section-title">Incident Location</div>
+            </div>
+            <div class="form-group">
+              <label>Street</label>
+              <input type="text" id="street" placeholder="123 Main St">
+            </div>
+            <div class="form-row three">
+              <div class="form-group">
+                <label>Apt / Suite</label>
+                <input type="text" id="apt-suite" placeholder="Optional">
+              </div>
+              <div class="form-group">
+                <label>Floor</label>
+                <input type="text" id="floor-number" placeholder="Optional">
+              </div>
+              <div class="form-group">
+                <label>City</label>
+                <input type="text" id="city">
+              </div>
+            </div>
+            <div class="form-group" style="max-width:200px;">
+              <label>State</label>
+              <select id="state">
+                <option value="">— Select —</option>
+                <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+                <option>CA</option><option>CO</option><option>CT</option><option>DE</option>
+                <option>FL</option><option>GA</option><option>HI</option><option>ID</option>
+                <option>IL</option><option>IN</option><option>IA</option><option>KS</option>
+                <option>KY</option><option>LA</option><option>ME</option><option>MD</option>
+                <option>MA</option><option>MI</option><option>MN</option><option>MS</option>
+                <option>MO</option><option>MT</option><option>NE</option><option>NV</option>
+                <option>NH</option><option>NJ</option><option>NM</option><option>NY</option>
+                <option>NC</option><option>ND</option><option>OH</option><option>OK</option>
+                <option>OR</option><option>PA</option><option>RI</option><option>SC</option>
+                <option>SD</option><option>TN</option><option>TX</option><option>UT</option>
+                <option>VT</option><option>VA</option><option>WA</option><option>WV</option>
+                <option>WI</option><option>WY</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- SECTION 3 — Personnel -->
+          <div class="card form-section" id="s3">
+            <div class="section-header">
+              <div class="section-num">3</div>
+              <div class="section-title">Personnel</div>
+            </div>
+            <div class="form-group">
+              <label>Reviewing Supervisor</label>
+              <input type="text" id="supervisor-name" class="input-readonly" readonly>
+            </div>
+            <div class="form-group">
+              <label>Primary Officer <span class="required">*</span>
+                <span style="font-size:11px;color:var(--text-muted);">— officer being evaluated</span>
+              </label>
+              <select id="primary-officer" required>
+                <option value="">— Select officer —</option>
+              </select>
+              <div class="form-error visible" id="officer-error" style="display:none;">Please select the primary officer.</div>
+            </div>
+            <div class="form-group">
+              <label>Backup Officer(s)
+                <span style="font-size:11px;color:var(--text-muted);">— documentation only, no score impact</span>
+              </label>
+              <div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start;">
+                <div id="backup-officer-search" style="flex:1;"></div>
+                <button type="button" class="btn btn-secondary btn-sm" id="add-backup" style="margin-top:2px;white-space:nowrap;">+ Add</button>
+              </div>
+              <div id="backup-tags"></div>
+            </div>
+          </div>
+
+          <!-- SECTION 4 — Incident Analysis -->
+          <div class="card form-section" id="s4">
+            <div class="section-header">
+              <div class="section-num">4</div>
+              <div class="section-title">Incident Analysis</div>
+            </div>
+            <div class="form-group">
+              <label>Incident Type <span class="required">*</span></label>
+              <select id="incident-type" required>
+                <option value="">— Select incident type —</option>
+              </select>
+            </div>
+
+            <!-- Universal Performance Assessment — always shown, single selection -->
+            <div id="universal-kpi-section" style="margin-top:20px;display:none;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;
+                   text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;">
+                Overall Performance Assessment <span class="required">*</span>
+              </div>
+              <div id="universal-kpi-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+            </div>
+
+            <div id="kpi-section" style="display:none;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <label style="margin:0;">KPI Checklist <span class="required">*</span></label>
+                <div style="display:flex;gap:6px;">
+                  <button type="button" class="btn btn-ghost btn-sm" id="mark-all-observed">All Observed</button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="mark-all-na">All N/A</button>
+                </div>
+              </div>
+              <div id="kpi-list" class="kpi-checklist"></div>
+            </div>
+
+            <div id="safety-section" class="cl-panel">
+              <div class="cl-header" onclick="clToggle('safety-body','safety-chev')">
+                <div style="display:flex;align-items:center;">
+                  <span class="cl-title-danger">Officer Safety Deficiencies</span>
+                  <span class="cl-hint">— check any observed</span>
+                  <span class="cl-badge cl-badge-danger" id="safety-badge"></span>
+                </div>
+                <span class="cl-chevron" id="safety-chev">▼</span>
+              </div>
+              <div class="cl-body" id="safety-body">
+                <div id="safety-list"></div>
+              </div>
+            </div>
+
+            <div class="form-group mt-4">
+              <label>Disposition <span style="font-size:11px;color:var(--text-muted);">— select all that apply</span></label>
+              <div id="disposition-list" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="arrest_made" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">Arrest Made / Taken into Custody</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="citation_issued" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">Citation / Summons Issued</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="verbal_warning" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">Verbal Warning</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="written_warning" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">Written Warning</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="field_release" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">Field Release — No Charges</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="report_filed" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">Report Filed</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="citizen_assist" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">Citizen Assist</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="transported_medical" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">Transported — Medical / Hospital</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="referred_other_agency" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">Referred to Other Agency / Unit</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="no_action_taken" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">No Action Taken / Unfounded</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+                  <input type="checkbox" name="disposition" value="other" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+                  <span style="font-size:13px;color:var(--text-secondary);">Other — See Notes</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION 5 — Follow-Up Action & Outcome -->
+          <div class="card form-section" id="s5">
+            <div class="section-header">
+              <div class="section-num">5</div>
+              <div class="section-title">Follow-Up Action &amp; Outcome</div>
+            </div>
+            <label>Follow-Up Outcome <span class="required">*</span></label>
+            <div style="margin-top:10px;" class="outcome-grid">
+
+              <label class="outcome-opt">
+                <input type="radio" name="outcome" value="no_action">
+                <div class="outcome-card" style="--outcome-border:var(--success);--outcome-bg:var(--success-dim);">
+                  <div class="outcome-name">No Action</div>
+                  <div class="outcome-desc">Performance met or exceeded standards</div>
+                </div>
+              </label>
+
+              <label class="outcome-opt">
+                <input type="radio" name="outcome" value="commendation">
+                <div class="outcome-card" style="--outcome-border:#3b82f6;--outcome-bg:rgba(59,130,246,0.1);">
+                  <div class="outcome-name">Commendation</div>
+                  <div class="outcome-desc">Exemplary performance. Formal recognition</div>
+                </div>
+              </label>
+
+              <label class="outcome-opt">
+                <input type="radio" name="outcome" value="coaching">
+                <div class="outcome-card" style="--outcome-border:var(--warning);--outcome-bg:var(--warning-dim);">
+                  <div class="outcome-name">Coaching</div>
+                  <div class="outcome-desc">Informal developmental guidance</div>
+                </div>
+              </label>
+
+              <label class="outcome-opt">
+                <input type="radio" name="outcome" value="training">
+                <div class="outcome-card" style="--outcome-border:#8b5cf6;--outcome-bg:rgba(139,92,246,0.1);">
+                  <div class="outcome-name">Training</div>
+                  <div class="outcome-desc">Formal training required</div>
+                </div>
+              </label>
+
+              <label class="outcome-opt">
+                <input type="radio" name="outcome" value="internal_affairs">
+                <div class="outcome-card" style="--outcome-border:var(--danger);--outcome-bg:var(--danger-dim);">
+                  <div class="outcome-name">Internal Affairs</div>
+                  <div class="outcome-desc">Formal misconduct referral. Chief notified.</div>
+                </div>
+              </label>
+
+              <label class="outcome-opt">
+                <input type="radio" name="outcome" value="pip">
+                <div class="outcome-card" style="--outcome-border:#f97316;--outcome-bg:rgba(249,115,22,0.1);">
+                  <div class="outcome-name">PIP</div>
+                  <div class="outcome-desc">Performance Improvement Plan</div>
+                </div>
+              </label>
+
+            </div>
+            <div class="form-error" id="outcome-error" style="margin-top:8px;display:none;">Please select a follow-up outcome.</div>
+
+            <!-- Training notice -->
+            <div class="training-notice" id="training-notice">
+              <strong>Delta T will auto-open.</strong> One intervention tracking case will be created for each
+              KPI marked Not Observed on this review. No duplicate cases will be opened if an active case
+              already exists for that officer + KPI.
+            </div>
+
+            <!-- IA notice -->
+            <div id="ia-notice" style="display:none;margin-top:12px;padding:12px 14px;
+                 background:var(--danger-dim);border:1px solid rgba(239,68,68,0.25);
+                 border-radius:var(--border-radius);font-size:12px;color:var(--danger);">
+              <strong>IA referral opens immediately.</strong> The Chief will be automatically notified
+              with the case number and your name. You will not retain visibility of this case after submission.
+            </div>
+          </div>
+
+          <!-- SECTION 6 — Notes -->
+          <div class="card form-section" id="s6">
+            <div class="section-header">
+              <div class="section-num">6</div>
+              <div class="section-title">Supervisor Notes</div>
+            </div>
+            <div class="form-group">
+              <label>Internal Notes
+                <span style="font-size:11px;color:var(--text-muted);">— confidential. Never printed. Never shared.</span>
+              </label>
+              <textarea id="internal-notes" rows="4" placeholder="Private notes for your own reference…"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Report-Facing Notes <span class="required">*</span>
+                <span style="font-size:11px;color:var(--text-muted);">— printed on final report. Goes in officer's file.</span>
+              </label>
+              <textarea id="report-notes" rows="5" placeholder="Document your observations, context, and basis for the follow-up decision…"></textarea>
+              <div class="form-error" id="report-notes-error" style="display:none;">Report-facing notes are required.</div>
+            </div>
+          </div>
+
+        </div><!-- /form-body -->
+      </div><!-- /form-shell -->
+
+      <!-- Sticky actions -->
+      <div class="form-actions">
+        <a href="reviews.html" class="btn btn-ghost">← Cancel</a>
+        <div style="display:flex;gap:10px;">
+          <button type="button" class="btn btn-secondary" id="save-draft-btn">Save Draft</button>
+          <button type="button" class="btn btn-primary" id="submit-btn">Submit Review</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth, getCurrentProfile } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  // ── Officer Search Component (embedded) ─────────────────
+// ============================================================
+// ATLAS — officer-search.js
+// Reusable searchable officer picker
+// Usage:
+//   import { OfficerSearch } from './officer-search.js';
+//   const picker = new OfficerSearch({
+//     container:  document.getElementById('officer-search-wrap'),
+//     supabase:   supabase,
+//     agencyId:   profile.agency_id,
+//     supervisorId: profile.role === 'supervisor' ? profile.id : null,
+//     placeholder: 'Search officer name or badge…',
+//     onSelect: (officer) => { /* officer = { id, first_name, last_name, badge_number } */ }
+//   });
+//   picker.setValue(officerId);   // pre-select an officer
+//   picker.getValue();            // returns current officer id or null
+//   picker.clear();               // clear selection
+// ============================================================
+
+const CSS = `
+.osp-wrap { position:relative; width:100%; }
+.osp-input-row { display:flex; align-items:center; gap:0; border:1px solid var(--border); border-radius:var(--border-radius); background:#fff; transition:border-color .15s; }
+.osp-input-row:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+.osp-icon { display:flex; align-items:center; justify-content:center; padding:0 10px; color:var(--text-muted); flex-shrink:0; }
+.osp-icon svg { width:15px; height:15px; }
+.osp-input { flex:1; border:none; outline:none; background:transparent; font-family:var(--font-body); font-size:14px; color:var(--text-primary); padding:9px 0; min-width:0; }
+.osp-input::placeholder { color:var(--text-muted); }
+.osp-clear { display:none; align-items:center; justify-content:center; width:32px; height:32px; cursor:pointer; color:var(--text-muted); flex-shrink:0; border:none; background:none; padding:0; }
+.osp-clear:hover { color:var(--text-primary); }
+.osp-clear svg { width:14px; height:14px; }
+.osp-selected { display:none; align-items:center; gap:8px; padding:8px 12px; background:var(--accent-dim); border:1px solid var(--accent); border-radius:var(--border-radius); font-size:13px; color:var(--accent); font-weight:600; }
+.osp-selected-name { flex:1; }
+.osp-selected-change { font-size:11px; font-weight:500; color:var(--text-muted); cursor:pointer; text-decoration:underline; white-space:nowrap; }
+.osp-selected-change:hover { color:var(--accent); }
+.osp-dropdown { display:none; position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid var(--border); border-radius:var(--border-radius-lg); box-shadow:var(--shadow-lg); z-index:200; max-height:260px; overflow-y:auto; }
+.osp-dropdown.open { display:block; }
+.osp-option { display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; transition:background .1s; border-bottom:1px solid var(--border-light,#f3f4f6); }
+.osp-option:last-child { border-bottom:none; }
+.osp-option:hover, .osp-option.focused { background:var(--accent-dim); }
+.osp-avatar { width:30px; height:30px; border-radius:50%; background:var(--accent-dim); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; }
+.osp-name { font-size:13px; font-weight:600; color:var(--text-primary); }
+.osp-badge { font-size:11px; color:var(--text-muted); }
+.osp-empty { padding:16px 14px; font-size:13px; color:var(--text-muted); text-align:center; }
+.osp-loading { padding:16px 14px; font-size:13px; color:var(--text-muted); text-align:center; }
+`;
+
+function injectStyles() {
+  if (document.getElementById('osp-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'osp-styles';
+  style.textContent = CSS;
+  document.head.appendChild(style);
+}
+
+class OfficerSearch {
+  constructor({ container, supabase, agencyId, supervisorId = null, placeholder = 'Search officer…', onSelect = null, required = false }) {
+    injectStyles();
+    this._supabase     = supabase;
+    this._agencyId     = agencyId;
+    this._supervisorId = supervisorId;
+    this._onSelect     = onSelect;
+    this._required     = required;
+    this._officers     = [];   // full roster cache
+    this._filtered     = [];
+    this._selected     = null; // { id, first_name, last_name, badge_number }
+    this._focusIdx     = -1;
+    this._container    = container;
+
+    this._render(placeholder);
+    this._loadOfficers();
+  }
+
+  _render(placeholder) {
+    this._container.innerHTML = `
+      <div class="osp-wrap" id="osp-wrap">
+        <div class="osp-input-row" id="osp-input-row">
+          <span class="osp-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </span>
+          <input class="osp-input" id="osp-input" type="text"
+            placeholder="${placeholder}" autocomplete="off" spellcheck="false" />
+          <button class="osp-clear" id="osp-clear" type="button" tabindex="-1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="osp-selected" id="osp-selected">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;">
+            <polyline points="20,6 9,17 4,12"/>
+          </svg>
+          <span class="osp-selected-name" id="osp-selected-name"></span>
+          <span class="osp-selected-change" id="osp-change">Change</span>
+        </div>
+        <div class="osp-dropdown" id="osp-dropdown"></div>
+      </div>`;
+
+    this._input    = this._container.querySelector('#osp-input');
+    this._clear    = this._container.querySelector('#osp-clear');
+    this._dropdown = this._container.querySelector('#osp-dropdown');
+    this._selectedEl = this._container.querySelector('#osp-selected');
+    this._selectedName = this._container.querySelector('#osp-selected-name');
+    this._changeBtn = this._container.querySelector('#osp-change');
+
+    this._input.addEventListener('input',   () => this._onInput());
+    this._input.addEventListener('keydown', (e) => this._onKeydown(e));
+    this._input.addEventListener('focus',   () => this._openDropdown());
+    this._clear.addEventListener('click',   () => this.clear());
+    this._changeBtn.addEventListener('click', () => this._deselect());
+
+    document.addEventListener('click', (e) => {
+      if (!this._container.contains(e.target)) this._closeDropdown();
+    });
+  }
+
+  async _loadOfficers() {
+    try {
+      // Officer pickers ALWAYS load the full agency roster (every role, every page).
+      // Supervisor "own roster" (supervisor_rosters) drives Auto Select + dashboard
+      // scope only — never the selection dropdowns. See Access Separation Map.
+      const { data: rows } = await this._supabase
+        .from('personnel_roster')
+        .select('id, first_name, last_name, badge_number, rank')
+        .eq('agency_id', this._agencyId)
+        .eq('officer_status', 'active')
+        .order('last_name');
+      this._officers = rows || [];
+    } catch(e) {
+      console.error('[OfficerSearch] Load error:', e);
+    }
+  }
+
+  _onInput() {
+    const q = this._input.value.trim().toLowerCase();
+    this._clear.style.display = q ? 'flex' : 'none';
+    if (!q) { this._closeDropdown(); return; }
+    this._filtered = this._officers.filter(o =>
+      `${o.last_name} ${o.first_name} ${o.badge_number||''}`.toLowerCase().includes(q) ||
+      `${o.first_name} ${o.last_name}`.toLowerCase().includes(q)
+    );
+    this._focusIdx = -1;
+    this._renderDropdown();
+    this._openDropdown();
+  }
+
+  _renderDropdown() {
+    if (!this._filtered.length) {
+      this._dropdown.innerHTML = `<div class="osp-empty">No officers found</div>`;
+      return;
+    }
+    this._dropdown.innerHTML = this._filtered.map((o, i) => {
+      const initials = `${o.first_name[0]}${o.last_name[0]}`.toUpperCase();
+      return `<div class="osp-option" data-idx="${i}">
+        <div class="osp-avatar">${initials}</div>
+        <div>
+          <div class="osp-name">${o.last_name}, ${o.first_name}</div>
+          <div class="osp-badge">Badge #${o.badge_number || '—'}${o.rank ? ' · ' + o.rank : ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    this._dropdown.querySelectorAll('.osp-option').forEach(el => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        this._selectByIdx(parseInt(el.dataset.idx));
+      });
+    });
+  }
+
+  _onKeydown(e) {
+    if (!this._dropdown.classList.contains('open')) return;
+    const opts = this._dropdown.querySelectorAll('.osp-option');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this._focusIdx = Math.min(this._focusIdx + 1, opts.length - 1);
+      this._updateFocus(opts);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      this._focusIdx = Math.max(this._focusIdx - 1, 0);
+      this._updateFocus(opts);
+    } else if (e.key === 'Enter' && this._focusIdx >= 0) {
+      e.preventDefault();
+      this._selectByIdx(this._focusIdx);
+    } else if (e.key === 'Escape') {
+      this._closeDropdown();
+    }
+  }
+
+  _updateFocus(opts) {
+    opts.forEach((o, i) => o.classList.toggle('focused', i === this._focusIdx));
+    if (this._focusIdx >= 0) opts[this._focusIdx]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  _selectByIdx(idx) {
+    const o = this._filtered[idx];
+    if (!o) return;
+    this._selected = o;
+    this._selectedName.textContent = `${o.last_name}, ${o.first_name} (#${o.badge_number || '—'})`;
+    this._selectedEl.style.display = 'flex';
+    this._container.querySelector('#osp-input-row').style.display = 'none';
+    this._closeDropdown();
+    if (this._onSelect) this._onSelect(o);
+  }
+
+  _deselect() {
+    this._selected = null;
+    this._selectedEl.style.display = 'none';
+    this._container.querySelector('#osp-input-row').style.display = 'flex';
+    this._input.value = '';
+    this._clear.style.display = 'none';
+    this._input.focus();
+    if (this._onSelect) this._onSelect(null);
+  }
+
+  _openDropdown() {
+    if (this._filtered.length) this._dropdown.classList.add('open');
+  }
+
+  _closeDropdown() {
+    this._dropdown.classList.remove('open');
+  }
+
+  // ── Public API ──────────────────────────────────────────────
+
+  getValue() {
+    return this._selected?.id || null;
+  }
+
+  getOfficer() {
+    return this._selected || null;
+  }
+
+  setValue(officerId) {
+    if (!officerId) return;
+    // Wait for officers to load if needed
+    const trySet = () => {
+      const o = this._officers.find(x => x.id === officerId);
+      if (o) { this._filtered = [o]; this._selectByIdx(0); }
+    };
+    if (this._officers.length) trySet();
+    else setTimeout(trySet, 800);
+  }
+
+  clear() {
+    this._deselect();
+  }
+
+  setAgencyId(agencyId) {
+    this._agencyId = agencyId;
+    this._officers = [];
+    this._loadOfficers();
+  }
+}
+
+
+  // ── Collapsible panel helpers ───────────────────────────────
+  window.clToggle = function(bodyId, chevId) {
+    document.getElementById(bodyId).classList.toggle('open');
+    document.getElementById(chevId).classList.toggle('open');
+  };
+  window.clTrackDisp = function() {
+    setTimeout(() => {
+      const n = document.querySelectorAll('input[name="disposition"]:checked').length;
+      const b = document.getElementById('disp-badge');
+      b.textContent = n + ' selected';
+      b.classList.toggle('show', n > 0);
+      document.querySelectorAll('[id^="dw-"]').forEach(el => {
+        el.classList.toggle('d-checked', el.querySelector('input').checked);
+      });
+    }, 0);
+  };
+  window.clTrackSafety = function() {
+    setTimeout(() => {
+      const n = document.querySelectorAll('#safety-list input:checked').length;
+      const b = document.getElementById('safety-badge');
+      b.textContent = n + ' flagged';
+      b.classList.toggle('show', n > 0);
+    }, 0);
+  };
+
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['internal_affairs','training_bureau','agency_admin','supervisor']
+  });
+  renderNav(profile, 'review-new');
+  renderTopbar('New Review');
+
+  // ── State ───────────────────────────────────────────────
+  let kpiResponses   = {};   // { kpi_id: 'observed'|'not_observed'|'na' }
+  let safetyChecked     = new Set(); // safety checklist item IDs checked
+  let universalAssessment = null;    // selected universal KPI id
+  let safetyResponses = {};  // { item_id: true|false }
+  let backupOfficerIds = []; // array of personnel_roster IDs
+  let backupOfficerNames = {}; // id → display name
+
+  // ── Pre-fill read-only fields ───────────────────────────
+  document.getElementById('supervisor-name').value = profile.full_name;
+  document.getElementById('agency-name').value = profile.agencies?.name || '';
+  document.getElementById('review-date').value = today();
+  document.getElementById('incident-date').value = today();
+
+  function today() {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  // ── Load officer roster ─────────────────────────────────
+  async function loadOfficers() {
+    // Officer pickers ALWAYS use the full agency roster, every role. Supervisor's
+    // own roster (supervisor_rosters) is for Auto Select + dashboard scope only.
+    const { data, error } = await supabase
+      .from('personnel_roster')
+      .select('id, first_name, last_name, badge_number')
+      .eq('agency_id', profile.agency_id)
+      .eq('officer_status', 'active')
+      .order('last_name');
+    if (error) return;
+
+    const officers = data || [];
+
+    // Cache all officer names for backup tags display
+    officers.forEach(o => {
+      backupOfficerNames[o.id] = `${o.last_name}, ${o.first_name}${o.badge_number ? ` (#${o.badge_number})` : ''}`;
+    });
+
+    // Primary officer search
+    window._primaryOfficerSearch = new OfficerSearch({
+      container:    document.getElementById('primary-officer-search'),
+      supabase:     supabase,
+      agencyId:     profile.agency_id,
+      placeholder:  'Search officer name or badge #…',
+      onSelect:     () => { document.getElementById('officer-error').style.display = 'none'; }
+    });
+
+    // Backup officer search
+    window._backupSearch = new OfficerSearch({
+      container:    document.getElementById('backup-officer-search'),
+      supabase:     supabase,
+      agencyId:     profile.agency_id,
+      placeholder:  'Search backup officer…',
+      onSelect:     null
+    });
+  }
+
+  // ── Load incident types ─────────────────────────────────
+  async function loadIncidentTypes() {
+    const { data } = await supabase
+      .from('incident_types')
+      .select('id, name')
+      .or(`agency_id.eq.${profile.agency_id},is_global_default.eq.true`)
+      .eq('is_active', true)
+      .order('display_order');
+
+    const sel = document.getElementById('incident-type');
+    (data || []).forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name;
+      sel.appendChild(opt);
+    });
+  }
+
+  // ── Load universal KPIs + safety checklist on page load ──
+  async function loadUniversalKpisAndSafety() {
+    // Universal Performance Assessment — radio button selection
+    const { data: universalKpis } = await supabase
+      .from('kpi_definitions')
+      .select('id, kpi_text')
+      .is('incident_type_id', null)
+      .eq('is_global_default', true)
+      .eq('is_active', true)
+      .order('display_order');
+
+    if (universalKpis?.length) {
+      const ul = document.getElementById('universal-kpi-list');
+      ul.innerHTML = universalKpis.map((k, i) => `
+        <label style="display:flex;align-items:center;gap:12px;padding:12px 14px;
+             background:var(--bg-elevated);border-radius:var(--border-radius);
+             border:1.5px solid var(--border);cursor:pointer;transition:all var(--transition);"
+             id="universal-label-${k.id}"
+             onmouseover="this.style.borderColor='var(--border-focus)'"
+             onmouseout="if(!document.getElementById('univ-${k.id}').checked)this.style.borderColor='var(--border)'">
+          <input type="radio" name="universal_assessment" id="univ-${k.id}"
+                 value="${k.id}"
+                 style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;"
+                 onchange="selectUniversalKpi('${k.id}')">
+          <span style="font-size:13px;color:var(--text-secondary);">${escHtml(k.kpi_text)}</span>
+        </label>`).join('');
+      document.getElementById('universal-kpi-section').style.display = 'block';
+    }
+
+    // Safety checklist — always load
+    const agencyId = profile?.agency_id;
+    if (agencyId) {
+      const { data: safetyItems } = await supabase
+        .from('safety_checklist_items')
+        .select('id, item_text, category')
+        .or(`agency_id.eq.${agencyId},agency_id.is.null`)
+        .eq('is_active', true)
+        .order('category')
+        .order('display_order');
+
+      if (safetyItems?.length) {
+        const sl = document.getElementById('safety-list');
+        const grouped = {};
+        safetyItems.forEach(item => {
+          const cat = item.category || 'General';
+          if (!grouped[cat]) grouped[cat] = [];
+          grouped[cat].push(item);
+        });
+        let html = '<div class="cl-grid">';
+        Object.entries(grouped).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([cat, items]) => {
+          html += `<div class="cl-cat">${escHtml(cat)}</div>`;
+          items.forEach(item => {
+            html += `<label class="cl-item" id="safety-label-${item.id}">
+              <input type="checkbox" id="safety-cb-${item.id}" value="${item.id}"
+                     style="accent-color:var(--danger);"
+                     onchange="toggleSafety('${item.id}',this.checked);clTrackSafety();">
+              <span>${escHtml(item.item_text)}</span>
+            </label>`;
+          });
+        });
+        html += '</div>';
+        sl.innerHTML = html;
+      }
+    }
+  }
+
+  window.toggleSafety = function(itemId, checked, cb) {
+    if (checked) {
+      safetyChecked.add(itemId);
+      const lbl = document.getElementById(`safety-label-${itemId}`);
+      if (lbl) { lbl.style.borderColor = 'var(--danger)'; lbl.style.background = 'var(--danger-dim)'; }
+    } else {
+      safetyChecked.delete(itemId);
+      const lbl = document.getElementById(`safety-label-${itemId}`);
+      if (lbl) { lbl.style.borderColor = 'var(--border)'; lbl.style.background = 'var(--bg-elevated)'; }
+    }
+  };
+
+  window.selectUniversalKpi = function(kpiId) {
+    universalAssessment = kpiId;
+    // Highlight selected label
+    document.querySelectorAll('#universal-kpi-list label').forEach(lbl => {
+      lbl.style.borderColor = 'var(--border)';
+      lbl.style.background  = 'var(--bg-elevated)';
+    });
+    const selectedLabel = document.getElementById(`universal-label-${kpiId}`);
+    if (selectedLabel) {
+      selectedLabel.style.borderColor = 'var(--accent)';
+      selectedLabel.style.background  = 'var(--accent-dim)';
+    }
+  };
+
+  function buildKpiRows(kpis) {
+    return kpis.map(k => `
+      <div class="kpi-row" id="kpi-row-${k.id}">
+        <div class="kpi-row-text">${escHtml(k.kpi_text)}</div>
+        <div class="kpi-btns">
+          <button type="button" class="kpi-opt" data-kpi="${k.id}" data-val="observed">Observed</button>
+          <button type="button" class="kpi-opt" data-kpi="${k.id}" data-val="not_observed">Not Observed</button>
+          <button type="button" class="kpi-opt" data-kpi="${k.id}" data-val="na">N/A</button>
+        </div>
+      </div>`).join('');
+  }
+
+  // ── Load KPIs when incident type changes ────────────────
+  document.getElementById('incident-type').addEventListener('change', async function() {
+    const typeId = this.value;
+
+    if (!typeId) {
+      document.getElementById('kpi-section').style.display = 'none';
+      return;
+    }
+
+    const { data: allKpis } = await supabase
+      .from('kpi_definitions')
+      .select('id, kpi_text, is_global_default, agency_id')
+      .eq('incident_type_id', typeId)
+      .eq('is_active', true)
+      .order('display_order');
+
+    // Only show global defaults + this agency's KPIs
+    const kpis = (allKpis || []).filter(k =>
+      k.is_global_default || k.agency_id === profile.agency_id
+    );
+
+    if (!kpis?.length) {
+      document.getElementById('kpi-section').style.display = 'none';
+      return;
+    }
+
+    const list = document.getElementById('kpi-list');
+    list.innerHTML = kpis.map(k => `
+      <div class="kpi-row" id="kpi-row-${k.id}">
+        <div class="kpi-row-text">${escHtml(k.kpi_text)}</div>
+        <div class="kpi-btns">
+          <button type="button" class="kpi-opt" data-kpi="${k.id}" data-val="observed">Observed</button>
+          <button type="button" class="kpi-opt" data-kpi="${k.id}" data-val="not_observed">Not Observed</button>
+          <button type="button" class="kpi-opt" data-kpi="${k.id}" data-val="na">N/A</button>
+        </div>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('.kpi-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const kpiId = btn.dataset.kpi;
+        const val   = btn.dataset.val;
+        kpiResponses[kpiId] = val;
+
+        // Update button states
+        list.querySelectorAll(`.kpi-opt[data-kpi="${kpiId}"]`).forEach(b => {
+          b.className = 'kpi-opt' + (b.dataset.val === val ? ` sel-${val}` : '');
+        });
+      });
+    });
+
+    document.getElementById('kpi-section').style.display = 'block';
+  });
+
+  // Mark all KPIs observed / N/A
+  document.getElementById('mark-all-observed').addEventListener('click', () => {
+    document.querySelectorAll('.kpi-opt[data-val="observed"]').forEach(btn => btn.click());
+  });
+  document.getElementById('mark-all-na').addEventListener('click', () => {
+    document.querySelectorAll('.kpi-opt[data-val="na"]').forEach(btn => btn.click());
+  });
+
+  // ── Load safety checklist ───────────────────────────────
+  async function loadSafetyChecklist() {
+    const { data } = await supabase
+      .from('safety_checklist_items')
+      .select('id, item_text')
+      .eq('agency_id', profile.agency_id)
+      .eq('officer_status', 'active')
+      .order('display_order');
+
+    if (!data?.length) return;
+
+    const list = document.getElementById('safety-list');
+    list.innerHTML = data.map(item => `
+      <div class="safety-item" onclick="document.getElementById('safety-${item.id}').click()">
+        <input type="checkbox" id="safety-${item.id}" data-item="${item.id}"
+               onchange="event.stopPropagation()">
+        <label for="safety-${item.id}" onclick="event.preventDefault()">
+          ${escHtml(item.item_text)}
+        </label>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        safetyResponses[cb.dataset.item] = cb.checked;
+      });
+    });
+
+    document.getElementById('safety-section').style.display = 'block';
+  }
+
+  // ── Backup officers ─────────────────────────────────────
+  document.getElementById('add-backup').addEventListener('click', () => {
+    const officer = window._backupSearch?.getOfficer();
+    if (!officer) return;
+    if (backupOfficerIds.includes(officer.id)) {
+      window._backupSearch.clear();
+      return;
+    }
+    backupOfficerNames[officer.id] = `${officer.last_name}, ${officer.first_name}${officer.badge_number ? ` (#${officer.badge_number})` : ''}`;
+    backupOfficerIds.push(officer.id);
+    renderBackupTags();
+    window._backupSearch.clear();
+  });
+
+  function renderBackupTags() {
+    const container = document.getElementById('backup-tags');
+    container.innerHTML = backupOfficerIds.map(id => `
+      <span class="backup-tag">
+        ${escHtml(backupOfficerNames[id] || id)}
+        <button type="button" onclick="removeBackup('${id}')" title="Remove">×</button>
+      </span>
+    `).join('');
+  }
+
+  window.removeBackup = function(id) {
+    backupOfficerIds = backupOfficerIds.filter(x => x !== id);
+    renderBackupTags();
+  };
+
+  // ── Outcome change ──────────────────────────────────────
+  document.querySelectorAll('input[name=outcome]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const val = radio.value;
+      document.getElementById('training-notice').style.display = val === 'training' ? 'block' : 'none';
+      document.getElementById('ia-notice').style.display = val === 'internal_affairs' ? 'block' : 'none';
+    });
+  });
+
+  // ── Scrollspy ───────────────────────────────────────────
+  const sections = ['s1','s2','s3','s4','s5','s6'];
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        sections.forEach(id => {
+          document.querySelector(`[data-section="${id}"]`)
+            ?.classList.toggle('active', id === entry.target.id);
+        });
+      }
+    });
+  }, { threshold: 0.3 });
+
+  sections.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) observer.observe(el);
+  });
+
+  window.scrollTo = function(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // ── Validate ────────────────────────────────────────────
+  function validate() {
+    let ok = true;
+
+    const reviewDate   = document.getElementById('review-date').value;
+    const incidentDate = document.getElementById('incident-date').value;
+    const officer      = window._primaryOfficerSearch?.getValue();
+    const outcome      = document.querySelector('input[name=outcome]:checked')?.value;
+    const reportNotes  = document.getElementById('report-notes').value.trim();
+
+    if (!reviewDate || !incidentDate) {
+      showToast('error', 'Required', 'Review date and incident date are required.'); ok = false;
+    }
+    if (!officer) {
+      document.getElementById('officer-error').style.display = 'block'; ok = false;
+      document.getElementById('s3').scrollIntoView({ behavior: 'smooth' });
+    } else {
+      document.getElementById('officer-error').style.display = 'none';
+    }
+    if (!outcome) {
+      document.getElementById('outcome-error').style.display = 'block'; ok = false;
+    } else {
+      document.getElementById('outcome-error').style.display = 'none';
+    }
+    if (!reportNotes) {
+      document.getElementById('report-notes-error').style.display = 'block'; ok = false;
+    } else {
+      document.getElementById('report-notes-error').style.display = 'none';
+    }
+
+    return ok;
+  }
+
+  // ── Build payload ───────────────────────────────────────
+  function buildPayload(status) {
+    const outcome = document.querySelector('input[name=outcome]:checked')?.value;
+    return {
+      agency_id:               profile.agency_id,
+      reviewing_supervisor_id: profile.id,
+      primary_officer_id:      window._primaryOfficerSearch?.getValue() || null,
+      backup_officer_ids:      backupOfficerIds.length ? backupOfficerIds : null,
+      police_case_number:      document.getElementById('police-case-number').value.trim() || null,
+      review_date:             document.getElementById('review-date').value,
+      incident_date:           document.getElementById('incident-date').value,
+      recording_start_time:    document.getElementById('recording-start').value || null,
+      recording_end_time:      document.getElementById('recording-end').value || null,
+      street:                  document.getElementById('street').value.trim() || null,
+      apt_suite:               document.getElementById('apt-suite').value.trim() || null,
+      floor_number:            document.getElementById('floor-number').value.trim() || null,
+      city:                    document.getElementById('city').value.trim() || null,
+      state:                   document.getElementById('state').value || null,
+      incident_type_id:        document.getElementById('incident-type').value || null,
+      kpi_responses:           (() => {
+        const merged = { ...kpiResponses };
+        if (universalAssessment) merged['universal_assessment'] = universalAssessment;
+        return Object.keys(merged).length ? merged : null;
+      })(),
+      safety_checklist:        (() => {
+        const checked = {};
+        document.querySelectorAll('#safety-list input[type=checkbox]:checked').forEach(cb => {
+          checked[cb.value] = true;
+        });
+        return Object.keys(checked).length ? checked : null;
+      })(),
+      disposition:             Array.from(document.querySelectorAll('input[name="disposition"]:checked')).map(cb => cb.value).join(',') || null,
+      follow_up_outcome:       outcome || null,
+      internal_notes:          document.getElementById('internal-notes').value.trim() || null,
+      report_notes:            document.getElementById('report-notes').value.trim() || null,
+      status,
+      is_ia_referral:          outcome === 'internal_affairs' && status === 'approved',
+      submitted_at:            status === 'approved' ? new Date().toISOString() : null,
+      approved_at:             status === 'approved' ? new Date().toISOString() : null,
+      approved_by:             status === 'approved' ? profile.id : null
+    };
+  }
+
+  // ── Submit / Save Draft ─────────────────────────────────
+  async function saveReview(status) {
+    if (status === 'approved' && !validate()) return;
+
+    const btn = status === 'approved'
+      ? document.getElementById('submit-btn')
+      : document.getElementById('save-draft-btn');
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
+
+    const payload = buildPayload(status);
+    const { data: review, error } = await supabase
+      .from('bwc_reviews')
+      .insert(payload)
+      .select('id, atlas_case_number, follow_up_outcome')
+      .single();
+
+    if (error) {
+      btn.classList.remove('btn-loading');
+      btn.disabled = false;
+      showToast('error', 'Save failed', error.message);
+      return;
+    }
+
+    // Handle IA case creation
+    if (review.follow_up_outcome === 'internal_affairs' && status === 'approved') {
+      await supabase.from('ia_cases').insert({
+        agency_id:               profile.agency_id,
+        source_review_id:        review.id,
+        submitting_supervisor_id: profile.id,
+        officer_id:              payload.primary_officer_id
+      });
+      // Note: Chief notification is Phase 6 (email). Case opens immediately.
+    }
+
+    // Handle PIP creation
+    if (review.follow_up_outcome === 'pip' && status === 'approved') {
+      await supabase.from('pips').insert({
+        agency_id:              profile.agency_id,
+        officer_id:             payload.primary_officer_id,
+        creating_supervisor_id: profile.id,
+        source_review_id:       review.id
+      });
+    }
+
+    // Activity log
+    await supabase.from('activity_log').insert({
+      agency_id:   profile.agency_id,
+      actor_id:    profile.id,
+      action:      status === 'approved' ? 'review_submitted' : 'review_draft_saved',
+      target_type: 'bwc_review',
+      target_id:   review.id,
+      metadata:    { atlas_case_number: review.atlas_case_number }
+    });
+
+    if (status === 'draft') {
+      showToast('success', 'Draft saved', `Review saved. You can continue editing anytime.`);
+      setTimeout(() => { window.location.href = `review-detail.html?id=${review.id}`; }, 1200);
+    } else {
+      showToast('success', 'Review submitted', `${review.atlas_case_number} — approved.`);
+      setTimeout(() => { window.location.href = `review-detail.html?id=${review.id}`; }, 1200);
+    }
+  }
+
+  document.getElementById('submit-btn').addEventListener('click',     () => saveReview('approved'));
+  document.getElementById('save-draft-btn').addEventListener('click', () => saveReview('draft'));
+
+  // ── Helpers ─────────────────────────────────────────────
+  function showToast(type, title, body = '') {
+    const icons = {
+      success: '<polyline points="20,6 9,17 4,12"/>',
+      error:   '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+      warning: '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/>'
+    };
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0;margin-top:1px;">${icons[type]||''}</svg>
+      <div class="toast-content"><div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}</div>`;
+    c.appendChild(t);
+    setTimeout(() => t.remove(), 4500);
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Init ─────────────────────────────────────────────────
+  await Promise.all([loadOfficers(), loadIncidentTypes(), loadUniversalKpisAndSafety()]);
+</script>
+</body>
+</html>

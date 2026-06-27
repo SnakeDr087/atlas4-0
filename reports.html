@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Reports</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="print.css" media="print">
+  <style>
+    .reports-layout { display: grid; grid-template-columns: 220px 1fr; gap: 20px; }
+    .report-nav { position: sticky; top: calc(var(--topbar-height) + 20px); }
+    .report-nav-item {
+      display: flex; align-items: center; gap: 9px; padding: 9px 12px;
+      font-size: 12px; font-weight: 500; color: var(--text-secondary);
+      border-left: 2px solid transparent; cursor: pointer; transition: all var(--transition);
+      border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    }
+    .report-nav-item:hover { color: var(--text-primary); border-left-color: var(--border); background: var(--bg-hover); }
+    .report-nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-dim); }
+    .report-panel { display: none; }
+    .report-panel.active { display: block; }
+    .report-params {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: var(--border-radius-lg); padding: 16px 20px; margin-bottom: 16px;
+    }
+    .report-params-title {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-muted); margin-bottom: 12px;
+    }
+    .report-output { display: none; }
+    .report-output.visible { display: block; animation: fadeIn 0.2s ease; }
+    .kpi-miss-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .kpi-miss-bar { flex: 1; height: 6px; background: var(--bg-overlay); border-radius: 3px; }
+    .kpi-miss-fill { height: 100%; background: var(--danger); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="print-header">
+        <div class="print-logo">ATLAS</div>
+        <div class="print-meta" id="print-report-meta"></div>
+      </div>
+
+      <div class="page-header flex items-center justify-between">
+        <div><h1>Reports</h1><p>Select a report, configure parameters, and generate.</p></div>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()" data-no-print>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="6,9 6,2 18,2 18,9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print / PDF
+        </button>
+      </div>
+
+      <div class="reports-layout">
+
+        <!-- Report nav -->
+        <nav class="report-nav" data-no-print>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);padding:0 12px 8px;">Reports</div>
+          <div class="report-nav-item active" data-report="officer-performance">Officer Performance</div>
+          <div class="report-nav-item" data-report="agency-performance">Agency Performance</div>
+          <div class="report-nav-item" data-report="delta-t-report">Delta T</div>
+          <div class="report-nav-item" data-report="training-compliance">Training Compliance</div>
+          <div class="report-nav-item" data-report="auto-select-audit">Auto Select Audit</div>
+          <div class="report-nav-item" data-report="individual-review">Individual Review</div>
+          <div class="report-nav-item" data-report="trouble-ticket-log">Trouble Ticket Log</div>
+        </nav>
+
+        <!-- Report panels -->
+        <div>
+
+          <!-- 1. Officer Performance -->
+          <div class="report-panel active" id="panel-officer-performance">
+            <div class="report-params">
+              <div class="report-params-title">Officer Performance Report</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
+                <div class="form-group" style="margin:0;">
+                  <label>Officer</label>
+                  <select id="op-officer"><option value="">— Select officer —</option></select>
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label>From Date</label>
+                  <input type="date" id="op-from">
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label>To Date</label>
+                  <input type="date" id="op-to">
+                </div>
+                <button class="btn btn-primary" id="op-run">Generate</button>
+              </div>
+            </div>
+            <div class="report-output" id="op-output"></div>
+          </div>
+
+          <!-- 2. Agency Performance -->
+          <div class="report-panel" id="panel-agency-performance">
+            <div class="report-params">
+              <div class="report-params-title">Agency Performance Report</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+                <div class="form-group" style="margin:0;">
+                  <label>From Date</label>
+                  <input type="date" id="ap-from">
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label>To Date</label>
+                  <input type="date" id="ap-to">
+                </div>
+                <button class="btn btn-primary" id="ap-run">Generate</button>
+              </div>
+            </div>
+            <div class="report-output" id="ap-output"></div>
+          </div>
+
+          <!-- 3. Delta T Report -->
+          <div class="report-panel" id="panel-delta-t-report">
+            <div class="report-params">
+              <div class="report-params-title">Delta T Intervention Report</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+                <div class="form-group" style="margin:0;">
+                  <label>From Date (T1)</label>
+                  <input type="date" id="dt-from">
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label>To Date (T1)</label>
+                  <input type="date" id="dt-to">
+                </div>
+                <button class="btn btn-primary" id="dt-run">Generate</button>
+              </div>
+            </div>
+            <div class="report-output" id="dt-output"></div>
+          </div>
+
+          <!-- 4. Training Compliance -->
+          <div class="report-panel" id="panel-training-compliance">
+            <div class="report-params">
+              <div class="report-params-title">Training Compliance Report</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+                <div class="form-group" style="margin:0;">
+                  <label>From Date</label>
+                  <input type="date" id="tc-from">
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label>To Date</label>
+                  <input type="date" id="tc-to">
+                </div>
+                <button class="btn btn-primary" id="tc-run">Generate</button>
+              </div>
+            </div>
+            <div class="report-output" id="tc-output"></div>
+          </div>
+
+          <!-- 5. Auto Select Audit -->
+          <div class="report-panel" id="panel-auto-select-audit">
+            <div class="report-params">
+              <div class="report-params-title">Auto Select Audit Report</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+                <div class="form-group" style="margin:0;">
+                  <label>From Date</label>
+                  <input type="date" id="as-from">
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label>To Date</label>
+                  <input type="date" id="as-to">
+                </div>
+                <button class="btn btn-primary" id="as-run">Generate</button>
+              </div>
+            </div>
+            <div class="report-output" id="as-output"></div>
+          </div>
+
+          <!-- 6. Individual Review -->
+          <div class="report-panel" id="panel-individual-review">
+            <div class="report-params">
+              <div class="report-params-title">Individual BWC Review Report</div>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;">
+                <div class="form-group" style="margin:0;">
+                  <label>ATLAS Case # or Case ID</label>
+                  <input type="text" id="ir-case" placeholder="BWC-2024-00001 or paste case ID">
+                </div>
+                <button class="btn btn-primary" id="ir-run">Generate</button>
+              </div>
+            </div>
+            <div class="report-output" id="ir-output"></div>
+          </div>
+
+          <!-- 7. Trouble Ticket Log -->
+          <div class="report-panel" id="panel-trouble-ticket-log">
+            <div class="report-params">
+              <div class="report-params-title">Trouble Ticket Log</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+                <div class="form-group" style="margin:0;">
+                  <label>From Date</label>
+                  <input type="date" id="tt-from">
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label>Status</label>
+                  <select id="tt-status">
+                    <option value="">All</option>
+                    <option value="open">Open</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary" id="tt-run">Generate</button>
+              </div>
+            </div>
+            <div class="report-output" id="tt-output"></div>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({ requireAuth: true });
+  renderNav(profile, 'reports');
+  renderTopbar('Reports');
+
+  const today = new Date().toISOString().split('T')[0];
+  const threeMonthsAgo = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
+
+  // Default date ranges
+  ['op-from','ap-from','dt-from','tc-from','as-from','tt-from'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = threeMonthsAgo;
+  });
+  ['op-to','ap-to','dt-to','tc-to','as-to'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = today;
+  });
+
+  // Load officers for picker
+  const { data: officers } = await supabase
+    .from('personnel_roster').select('id, first_name, last_name, badge_number')
+    .eq('agency_id', profile.agency_id).eq('officer_status', 'active').order('last_name');
+  const opSel = document.getElementById('op-officer');
+  (officers || []).forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.id;
+    opt.textContent = `${o.last_name}, ${o.first_name}${o.badge_number ? ' (#' + o.badge_number + ')' : ''}`;
+    opSel.appendChild(opt);
+  });
+
+  // Nav switching
+  document.querySelectorAll('.report-nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.report-nav-item').forEach(i => i.classList.remove('active'));
+      document.querySelectorAll('.report-panel').forEach(p => p.classList.remove('active'));
+      item.classList.add('active');
+      document.getElementById(`panel-${item.dataset.report}`).classList.add('active');
+    });
+  });
+
+  function setPrintMeta(title) {
+    document.getElementById('print-report-meta').innerHTML =
+      `${title}<br>${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+    document.title = `ATLAS — ${title}`;
+  }
+
+  function showOutput(id, html) {
+    const el = document.getElementById(id);
+    el.innerHTML = html;
+    el.classList.add('visible');
+  }
+
+  function spinner() {
+    return '<div style="display:flex;justify-content:center;padding:32px;"><div class="spinner"></div></div>';
+  }
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function outcomeBadge(o) {
+    const m = { no_action:['No Action','badge-no-action'], commendation:['Commendation','badge-commendation'],
+      coaching:['Coaching','badge-coaching'], training:['Training','badge-training'],
+      internal_affairs:['IA Referral','badge-ia'], pip:['PIP','badge-pip'] };
+    const [l, c] = m[o] || [o,'badge-muted'];
+    return `<span class="badge ${c}">${l}</span>`;
+  }
+
+  function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function statBlock(val, label, color='var(--accent)') {
+    return `<div style="text-align:center;padding:16px;">
+      <div style="font-size:28px;font-weight:700;font-family:var(--font-heading);color:${color};">${val}</div>
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-top:4px;">${label}</div>
+    </div>`;
+  }
+
+  // ── 1. Officer Performance ─────────────────────────────
+  document.getElementById('op-run').addEventListener('click', async () => {
+    const officerId = document.getElementById('op-officer').value;
+    const from      = document.getElementById('op-from').value;
+    const to        = document.getElementById('op-to').value;
+    if (!officerId) { alert('Select an officer.'); return; }
+
+    showOutput('op-output', spinner());
+    setPrintMeta('Officer Performance Report');
+
+    const officer = officers.find(o => o.id === officerId);
+
+    let q = supabase.from('bwc_reviews')
+      .select('id, atlas_case_number, incident_date, follow_up_outcome, incident_type:incident_types(name)')
+      .eq('primary_officer_id', officerId).eq('status','approved').eq('is_ia_referral',false);
+    if (from) q = q.gte('incident_date', from);
+    if (to)   q = q.lte('incident_date', to);
+    const { data: reviews } = await q;
+
+    const { data: deltaCases } = await supabase.from('delta_t_cases')
+      .select('id, kpi_text_snapshot, status, delta_t_total, t1_incident_date')
+      .eq('officer_id', officerId);
+
+    const total = (reviews || []).length;
+    const pos   = (reviews || []).filter(r => ['no_action','commendation'].includes(r.follow_up_outcome)).length;
+    const score = total ? Math.round((pos / total) * 100) : null;
+
+    const outcomeCounts = {};
+    (reviews || []).forEach(r => { outcomeCounts[r.follow_up_outcome] = (outcomeCounts[r.follow_up_outcome] || 0) + 1; });
+
+    showOutput('op-output', `
+      <div class="report-title">Officer Performance Report</div>
+      <div class="report-subtitle">${escHtml(`${officer?.last_name}, ${officer?.first_name}`)} · ${fmtDate(from)} — ${fmtDate(to)}</div>
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-radius:var(--border-radius);overflow:hidden;">
+          ${statBlock(score != null ? score : '—', 'Performance Score', score >= 90 ? 'var(--success)' : score >= 80 ? 'var(--accent)' : score >= 70 ? 'var(--warning)' : 'var(--danger)')}
+          ${statBlock(total, 'Total Reviews')}
+          ${statBlock(pos, 'Positive Outcomes', 'var(--success)')}
+          ${statBlock((deltaCases || []).filter(c => c.status === 'open' || c.status === 'flagged').length, 'Open Delta T', 'var(--warning)')}
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title" style="margin-bottom:12px;">Outcome Distribution</div>
+        ${['no_action','commendation','coaching','training','internal_affairs','pip']
+          .filter(o => outcomeCounts[o])
+          .map(o => {
+            const pct = Math.round((outcomeCounts[o] / total) * 100);
+            return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+              ${outcomeBadge(o)}
+              <div style="flex:1;height:5px;background:var(--bg-overlay);border-radius:3px;">
+                <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:3px;"></div>
+              </div>
+              <span class="mono" style="font-size:11px;color:var(--text-muted);">${outcomeCounts[o]} (${pct}%)</span>
+            </div>`;
+          }).join('') || '<div style="color:var(--text-muted);font-size:13px;">No reviews in range.</div>'}
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px;">Review History</div>
+        <div class="table-container">
+          <table class="atlas-table">
+            <thead><tr><th>Case #</th><th>Incident Type</th><th>Incident Date</th><th>Follow-Up</th></tr></thead>
+            <tbody>
+              ${(reviews || []).map(r => `<tr>
+                <td class="col-mono">${r.atlas_case_number || '—'}</td>
+                <td>${r.incident_type?.name || '—'}</td>
+                <td>${fmtDate(r.incident_date)}</td>
+                <td>${outcomeBadge(r.follow_up_outcome)}</td>
+              </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No reviews.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`);
+  });
+
+  // ── 2. Agency Performance ──────────────────────────────
+  document.getElementById('ap-run').addEventListener('click', async () => {
+    const from = document.getElementById('ap-from').value;
+    const to   = document.getElementById('ap-to').value;
+    showOutput('ap-output', spinner());
+    setPrintMeta('Agency Performance Report');
+
+    let q = supabase.from('bwc_reviews')
+      .select('id, follow_up_outcome, primary_officer_id, reviewing_supervisor_id, kpi_responses, incident_type:incident_types(name)')
+      .eq('agency_id', profile.agency_id).eq('status','approved').eq('is_ia_referral',false);
+    if (from) q = q.gte('incident_date', from);
+    if (to)   q = q.lte('incident_date', to);
+    const { data: reviews } = await q;
+
+    const total = (reviews || []).length;
+    const pos   = (reviews || []).filter(r => ['no_action','commendation'].includes(r.follow_up_outcome)).length;
+    const agencyScore = total ? Math.round((pos / total) * 100) : null;
+
+    // KPI misses
+    const kpiMisses = {};
+    (reviews || []).forEach(r => {
+      if (!r.kpi_responses) return;
+      Object.entries(r.kpi_responses).forEach(([, val]) => {
+        if (val === 'not_observed') {
+          kpiMisses['Not Observed'] = (kpiMisses['Not Observed'] || 0) + 1;
+        }
+      });
+    });
+
+    const outcomeCounts = {};
+    (reviews || []).forEach(r => { outcomeCounts[r.follow_up_outcome] = (outcomeCounts[r.follow_up_outcome] || 0) + 1; });
+
+    const uniqueOfficers = new Set((reviews || []).map(r => r.primary_officer_id)).size;
+    const uniqueSupervisors = new Set((reviews || []).map(r => r.reviewing_supervisor_id)).size;
+
+    showOutput('ap-output', `
+      <div class="report-title">Agency Performance Report</div>
+      <div class="report-subtitle">${fmtDate(from)} — ${fmtDate(to)}</div>
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;">
+          ${statBlock(agencyScore != null ? agencyScore : '—', 'Agency Score', agencyScore >= 90 ? 'var(--success)' : 'var(--accent)')}
+          ${statBlock(total, 'Total Reviews')}
+          ${statBlock(uniqueOfficers, 'Officers Reviewed')}
+          ${statBlock(uniqueSupervisors, 'Active Supervisors')}
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title" style="margin-bottom:12px;">Outcome Distribution</div>
+        ${['no_action','commendation','coaching','training','internal_affairs','pip']
+          .filter(o => outcomeCounts[o])
+          .map(o => {
+            const pct = Math.round(((outcomeCounts[o] || 0) / total) * 100);
+            return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+              ${outcomeBadge(o)}
+              <div style="flex:1;height:5px;background:var(--bg-overlay);border-radius:3px;">
+                <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:3px;"></div>
+              </div>
+              <span class="mono" style="font-size:11px;color:var(--text-muted);">${outcomeCounts[o]} (${pct}%)</span>
+            </div>`;
+          }).join('') || '<div style="color:var(--text-muted);">No data.</div>'}
+      </div>`);
+  });
+
+  // ── 3. Delta T Report ──────────────────────────────────
+  document.getElementById('dt-run').addEventListener('click', async () => {
+    const from = document.getElementById('dt-from').value;
+    const to   = document.getElementById('dt-to').value;
+    showOutput('dt-output', spinner());
+    setPrintMeta('Delta T Intervention Report');
+
+    let q = supabase.from('delta_t_cases')
+      .select(`*, officer:personnel_roster(first_name, last_name),
+               training:training_assignments(training_name, provider, date_delivered)`)
+      .eq('agency_id', profile.agency_id);
+    if (from) q = q.gte('t1_incident_date', from);
+    if (to)   q = q.lte('t1_incident_date', to);
+    const { data: cases } = await q;
+
+    const all     = cases || [];
+    const closed  = all.filter(c => c.status === 'closed' && c.delta_t_total != null);
+    const flagged = all.filter(c => c.is_overdue_flagged);
+    const avgTotal   = closed.length ? Math.round(closed.reduce((s,c) => s + c.delta_t_total, 0) / closed.length) : null;
+    const avgT1T2    = closed.filter(c => c.t1_to_t2_days != null);
+    const avgT2T4    = closed.filter(c => c.t2_to_t4_days != null);
+    const avgT1T2val = avgT1T2.length ? Math.round(avgT1T2.reduce((s,c) => s + c.t1_to_t2_days, 0) / avgT1T2.length) : null;
+    const avgT2T4val = avgT2T4.length ? Math.round(avgT2T4.reduce((s,c) => s + c.t2_to_t4_days, 0) / avgT2T4.length) : null;
+
+    showOutput('dt-output', `
+      <div class="report-title">Delta T Intervention Report</div>
+      <div class="report-subtitle">${fmtDate(from)} — ${fmtDate(to)}</div>
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);">
+          ${statBlock(all.length, 'Total Cases')}
+          ${statBlock(all.filter(c=>c.status==='open'||c.status==='flagged').length, 'Open', 'var(--warning)')}
+          ${statBlock(flagged.length, 'Flagged 90+d', 'var(--danger)')}
+          ${statBlock(closed.length, 'Closed', 'var(--success)')}
+          ${statBlock(avgTotal != null ? avgTotal + 'd' : '—', 'Avg Δ Total', 'var(--accent)')}
+        </div>
+      </div>
+      ${avgT1T2val != null || avgT2T4val != null ? `
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title" style="margin-bottom:12px;">Interval Averages (Closed Cases)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div style="text-align:center;padding:12px;background:var(--bg-elevated);border-radius:var(--border-radius);">
+            <div style="font-size:24px;font-weight:700;color:var(--accent);font-family:var(--font-heading);">${avgT1T2val ?? '—'}d</div>
+            <div style="font-size:11px;color:var(--text-muted);">T1 → T2 (Identification to Training)</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--bg-elevated);border-radius:var(--border-radius);">
+            <div style="font-size:24px;font-weight:700;color:var(--success);font-family:var(--font-heading);">${avgT2T4val ?? '—'}d</div>
+            <div style="font-size:11px;color:var(--text-muted);">T2 → T4 (Training to Verified Improvement)</div>
+          </div>
+        </div>
+      </div>` : ''}
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px;">All Cases</div>
+        <div class="table-container">
+          <table class="atlas-table">
+            <thead><tr><th>Officer</th><th>KPI</th><th>T1</th><th>T2</th><th>T4</th><th>Δ</th><th>Status</th></tr></thead>
+            <tbody>${all.map(c => `<tr>
+              <td>${c.officer ? escHtml(`${c.officer.last_name}, ${c.officer.first_name}`) : '—'}</td>
+              <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.kpi_text_snapshot)}</td>
+              <td>${fmtDate(c.t1_incident_date)}</td>
+              <td>${c.t2_training_delivered ? fmtDate(c.t2_training_delivered) : '—'}</td>
+              <td>${c.t4_verification_date  ? fmtDate(c.t4_verification_date)  : '—'}</td>
+              <td class="mono">${c.delta_t_total != null ? c.delta_t_total + 'd' : '—'}</td>
+              <td><span class="badge ${c.is_overdue_flagged ? 'badge-danger' : c.status === 'closed' ? 'badge-success' : 'badge-warning'}">${c.is_overdue_flagged ? '⚠ Flagged' : c.status}</span></td>
+            </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No cases.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`);
+  });
+
+  // ── 4. Training Compliance ─────────────────────────────
+  document.getElementById('tc-run').addEventListener('click', async () => {
+    const from = document.getElementById('tc-from').value;
+    const to   = document.getElementById('tc-to').value;
+    showOutput('tc-output', spinner());
+    setPrintMeta('Training Compliance Report');
+
+    let q = supabase.from('training_assignments')
+      .select(`*, officer:personnel_roster(first_name, last_name), supervisor:profiles!supervisor_id(full_name)`)
+      .order('date_ordered', { ascending: false });
+    if (from) q = q.gte('date_ordered', from);
+    if (to)   q = q.lte('date_ordered', to);
+    // Scope to agency
+    const { data: all } = await q;
+    const assignments = (all || []);
+
+    const onTime   = assignments.filter(a => a.completion_status === 'completed' && a.date_delivered && a.deadline && a.date_delivered <= a.deadline).length;
+    const overdue  = assignments.filter(a => a.completion_status === 'overdue' || (!a.date_delivered && a.deadline && a.deadline < today)).length;
+    const waived   = assignments.filter(a => a.completion_status === 'waived').length;
+    const pending  = assignments.filter(a => !['completed','waived'].includes(a.completion_status)).length;
+
+    showOutput('tc-output', `
+      <div class="report-title">Training Compliance Report</div>
+      <div class="report-subtitle">${fmtDate(from)} — ${fmtDate(to)}</div>
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);">
+          ${statBlock(assignments.length, 'Total Assignments')}
+          ${statBlock(onTime, 'On Time', 'var(--success)')}
+          ${statBlock(overdue, 'Overdue', 'var(--danger)')}
+          ${statBlock(waived, 'Waived', 'var(--text-muted)')}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px;">All Assignments</div>
+        <div class="table-container">
+          <table class="atlas-table">
+            <thead><tr><th>Officer</th><th>Training</th><th>Type</th><th>Ordered</th><th>Deadline</th><th>Delivered</th><th>Status</th></tr></thead>
+            <tbody>${assignments.map(a => `<tr>
+              <td>${a.officer ? escHtml(`${a.officer.last_name}, ${a.officer.first_name}`) : '—'}</td>
+              <td class="col-primary">${escHtml(a.training_name)}</td>
+              <td style="font-size:12px;">${(a.training_type || '').replace(/_/g,' ')}</td>
+              <td>${fmtDate(a.date_ordered)}</td>
+              <td style="color:${!a.date_delivered && a.deadline && a.deadline < today ? 'var(--danger)' : 'inherit'};">${fmtDate(a.deadline)}</td>
+              <td>${a.date_delivered ? fmtDate(a.date_delivered) : '—'}</td>
+              <td><span class="badge ${a.completion_status === 'completed' ? 'badge-success' : a.completion_status === 'overdue' ? 'badge-danger' : 'badge-muted'}">${(a.completion_status || '').replace('_',' ')}</span></td>
+            </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No assignments.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`);
+  });
+
+  // ── 5. Auto Select Audit ───────────────────────────────
+  document.getElementById('as-run').addEventListener('click', async () => {
+    const from = document.getElementById('as-from').value;
+    const to   = document.getElementById('as-to').value;
+    showOutput('as-output', spinner());
+    setPrintMeta('Auto Select Audit Report');
+
+    let q = supabase.from('auto_select_receipts')
+      .select(`*, officer:personnel_roster(first_name, last_name), supervisor:profiles!supervisor_id(full_name), review:bwc_reviews(atlas_case_number)`)
+      .eq('agency_id', profile.agency_id)
+      .order('created_at', { ascending: false });
+    if (from) q = q.gte('created_at', from);
+    if (to)   q = q.lte('created_at', to + 'T23:59:59');
+    const { data: receipts } = await q;
+    const all = receipts || [];
+
+    showOutput('as-output', `
+      <div class="report-title">Auto Select Audit Report</div>
+      <div class="report-subtitle">${fmtDate(from)} — ${fmtDate(to)} · ${all.length} selection${all.length !== 1 ? 's' : ''}</div>
+      <div class="card">
+        <div class="table-container">
+          <table class="atlas-table">
+            <thead><tr><th>Date/Time</th><th>Officer Selected</th><th>Incident Type</th><th>Priority</th><th>Weight</th><th>Supervisor</th><th>Review</th></tr></thead>
+            <tbody>${all.map(r => `<tr>
+              <td class="mono" style="font-size:11px;">${new Date(r.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}</td>
+              <td class="col-primary">${r.officer ? escHtml(`${r.officer.last_name}, ${r.officer.first_name}`) : '—'}</td>
+              <td>${escHtml(r.incident_type_name)}</td>
+              <td><span class="badge ${r.priority_level === 'critical' ? 'badge-danger' : r.priority_level === 'elevated' ? 'badge-warning' : 'badge-accent'}">${r.priority_level}</span></td>
+              <td class="mono">${r.selection_weight}×</td>
+              <td>${r.supervisor?.full_name || '—'}</td>
+              <td class="mono">${r.review?.atlas_case_number || '—'}</td>
+            </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No selections in range.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`);
+  });
+
+  // ── 6. Individual Review ───────────────────────────────
+  document.getElementById('ir-run').addEventListener('click', async () => {
+    const caseInput = document.getElementById('ir-case').value.trim();
+    if (!caseInput) return;
+    showOutput('ir-output', spinner());
+    setPrintMeta('BWC Review Report');
+
+    const isUUID = /^[0-9a-f-]{36}$/.test(caseInput);
+    let q = supabase.from('bwc_reviews')
+      .select(`*, agency:agencies(name), supervisor:profiles!reviewing_supervisor_id(full_name),
+               primary_officer:personnel_roster!primary_officer_id(first_name, last_name, badge_number, rank:agency_ranks(rank_name)),
+               incident_type:incident_types(name)`)
+      .eq('agency_id', profile.agency_id);
+    q = isUUID ? q.eq('id', caseInput) : q.ilike('atlas_case_number', caseInput);
+    const { data: reviews } = await q;
+    const r = reviews?.[0];
+
+    if (!r) {
+      showOutput('ir-output', '<div class="card empty-state"><div class="empty-title">Review not found</div></div>');
+      return;
+    }
+
+    // Note: internal_notes are intentionally excluded from printed output per spec
+    showOutput('ir-output', `
+      <div class="print-confidential">ATLAS Official Review Record — Confidential</div>
+      <div class="report-title">BWC Review Report</div>
+      <div class="report-subtitle">${r.atlas_case_number} · Generated ${new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' })}</div>
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:8px 12px;font-size:13px;">
+          <span style="color:var(--text-muted);">ATLAS Case #</span><span class="mono" style="color:var(--accent);">${r.atlas_case_number}</span>
+          <span style="color:var(--text-muted);">Police Case #</span><span>${r.police_case_number || '—'}</span>
+          <span style="color:var(--text-muted);">Department</span><span>${r.agency?.name || '—'}</span>
+          <span style="color:var(--text-muted);">Review Date</span><span>${fmtDate(r.review_date)}</span>
+          <span style="color:var(--text-muted);">Incident Date</span><span>${fmtDate(r.incident_date)}</span>
+          <span style="color:var(--text-muted);">Supervisor</span><span>${r.supervisor?.full_name || '—'}</span>
+          <span style="color:var(--text-muted);">Primary Officer</span><span>${r.primary_officer ? `${r.primary_officer.last_name}, ${r.primary_officer.first_name}` : '—'}</span>
+          <span style="color:var(--text-muted);">Incident Type</span><span>${r.incident_type?.name || '—'}</span>
+          <span style="color:var(--text-muted);">Follow-Up</span><span>${outcomeBadge(r.follow_up_outcome)}</span>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Supervisor Report Notes</div>
+        <div style="font-size:13px;color:var(--text-secondary);white-space:pre-wrap;">${escHtml(r.report_notes || 'No notes recorded.')}</div>
+      </div>`);
+  });
+
+  // ── 7. Trouble Ticket Log ──────────────────────────────
+  document.getElementById('tt-run').addEventListener('click', async () => {
+    const from   = document.getElementById('tt-from').value;
+    const status = document.getElementById('tt-status').value;
+    showOutput('tt-output', spinner());
+    setPrintMeta('Trouble Ticket Log');
+
+    let q = supabase.from('trouble_tickets')
+      .select(`*, creator:profiles!created_by(full_name, role)`)
+      .order('created_at', { ascending: false });
+    if (profile.role !== 'super_admin') q = q.eq('agency_id', profile.agency_id);
+    if (status) q = q.eq('status', status);
+    if (from)   q = q.gte('created_at', from);
+    const { data: tickets } = await q;
+    const all = tickets || [];
+
+    showOutput('tt-output', `
+      <div class="report-title">Trouble Ticket Log</div>
+      <div class="report-subtitle">${all.length} ticket${all.length !== 1 ? 's' : ''}</div>
+      <div class="card">
+        <div class="table-container">
+          <table class="atlas-table">
+            <thead><tr><th>Opened</th><th>Subject</th><th>Submitted By</th><th>Status</th><th>Resolved</th></tr></thead>
+            <tbody>${all.map(t => `<tr>
+              <td>${fmtDate(t.created_at?.split('T')[0])}</td>
+              <td class="col-primary">${escHtml(t.subject)}</td>
+              <td style="font-size:12px;">${t.creator?.full_name || '—'}</td>
+              <td><span class="badge ${t.status === 'resolved' ? 'badge-success' : t.status === 'in_progress' ? 'badge-warning' : 'badge-muted'}">${(t.status || '').replace('_',' ')}</span></td>
+              <td style="font-size:12px;">${t.resolved_at ? fmtDate(t.resolved_at.split('T')[0]) : '—'}</td>
+            </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No tickets.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`);
+  });
+</script>
+</body>
+</html>

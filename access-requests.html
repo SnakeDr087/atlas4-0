@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Access Requests</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Access Requests</h1>
+          <p>Supervisor requests for same-rank review access. Approved grants expire in 30 days.</p>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="pending">Pending</button>
+        <button class="tab-btn" data-tab="approved">Approved</button>
+        <button class="tab-btn" data-tab="history">History</button>
+      </div>
+
+      <div class="tab-panel active card" id="tab-pending">
+        <div id="pending-loading" style="display:flex;justify-content:center;padding:32px;"><div class="spinner"></div></div>
+        <div id="pending-content" style="display:none;"></div>
+      </div>
+
+      <div class="tab-panel card" id="tab-approved">
+        <div id="approved-content">
+          <div style="display:flex;justify-content:center;padding:32px;"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="tab-panel card" id="tab-history">
+        <div id="history-content">
+          <div style="display:flex;justify-content:center;padding:32px;"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin', 'agency_admin']
+  });
+  renderNav(profile, 'access-requests');
+  renderTopbar('Access Requests');
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+    });
+  });
+
+  // Pending requests
+  async function loadPending() {
+    const { data: requests } = await supabase
+      .from('access_requests')
+      .select(`id, reason, created_at, request_type,
+               requester:profiles!requester_id(full_name, role),
+               officer:personnel_roster!target_officer_id(first_name, last_name, badge_number)`)
+      .eq('agency_id', profile.agency_id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+
+    document.getElementById('pending-loading').style.display = 'none';
+    document.getElementById('pending-content').style.display = 'block';
+
+    if (!requests?.length) {
+      document.getElementById('pending-content').innerHTML =
+        '<div class="empty-state"><div class="empty-title">No pending requests</div></div>';
+      return;
+    }
+
+    document.getElementById('pending-content').innerHTML = requests.map(r => `
+      <div style="display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;
+           padding:16px 0;border-bottom:1px solid var(--border-subtle);">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">
+            ${escHtml(r.requester?.full_name || '—')}
+            <span style="font-size:11px;color:var(--text-muted);font-weight:400;"> requests access to review </span>
+            ${r.officer ? escHtml(`${r.officer.last_name}, ${r.officer.first_name}`) : '—'}
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);">
+            ${r.reason ? escHtml(r.reason) : 'No reason provided'} · 
+            ${fmtDate(r.created_at?.split('T')[0])}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-success btn-sm" onclick="handleRequest('${r.id}','approved')">Approve</button>
+          <button class="btn btn-danger btn-sm"  onclick="handleRequest('${r.id}','denied')">Deny</button>
+        </div>
+      </div>`).join('');
+  }
+
+  window.handleRequest = async function(requestId, decision) {
+    const now = new Date().toISOString();
+    const { data: req } = await supabase
+      .from('access_requests').select('*').eq('id', requestId).single();
+
+    const { error } = await supabase.from('access_requests')
+      .update({ status: decision, reviewed_by: profile.id, reviewed_at: now })
+      .eq('id', requestId);
+
+    if (error) { showToast('error', 'Failed', error.message); return; }
+
+    if (decision === 'approved' && req) {
+      await supabase.from('same_rank_permissions').upsert({
+        agency_id:         profile.agency_id,
+        supervisor_id:     req.requester_id,
+        officer_id:        req.target_officer_id,
+        access_request_id: requestId,
+        granted_at:        now,
+        expires_at:        new Date(Date.now() + 30 * 86400000).toISOString()
+      }, { onConflict: 'supervisor_id,officer_id' });
+    }
+
+    showToast('success', decision === 'approved' ? 'Access granted — 30-day expiry set' : 'Request denied');
+    await loadPending();
+  };
+
+  // Active permissions
+  async function loadApproved() {
+    const { data: perms } = await supabase
+      .from('same_rank_permissions')
+      .select(`supervisor_id, officer_id, granted_at, expires_at,
+               supervisor:profiles!supervisor_id(full_name),
+               officer:personnel_roster!officer_id(first_name, last_name)`)
+      .eq('agency_id', profile.agency_id)
+      .gte('expires_at', new Date().toISOString())
+      .order('expires_at', { ascending: true });
+
+    document.getElementById('approved-content').innerHTML = (perms || []).length
+      ? `<div class="table-container"><table class="atlas-table">
+           <thead><tr><th>Supervisor</th><th>Can Review</th><th>Granted</th><th>Expires</th></tr></thead>
+           <tbody>${(perms || []).map(p => `<tr>
+             <td class="col-primary">${p.supervisor?.full_name || '—'}</td>
+             <td>${p.officer ? escHtml(`${p.officer.last_name}, ${p.officer.first_name}`) : '—'}</td>
+             <td>${fmtDate(p.granted_at?.split('T')[0])}</td>
+             <td style="color:var(--warning);">${fmtDate(p.expires_at?.split('T')[0])}</td>
+           </tr>`).join('')}</tbody>
+         </table></div>`
+      : '<div class="empty-state"><div class="empty-title">No active permissions</div></div>';
+  }
+
+  // History
+  async function loadHistory() {
+    const { data: history } = await supabase
+      .from('access_requests')
+      .select(`status, created_at, reviewed_at,
+               requester:profiles!requester_id(full_name),
+               officer:personnel_roster!target_officer_id(first_name, last_name)`)
+      .eq('agency_id', profile.agency_id)
+      .in('status', ['approved','denied'])
+      .order('reviewed_at', { ascending: false })
+      .limit(50);
+
+    document.getElementById('history-content').innerHTML = (history || []).length
+      ? `<div class="table-container"><table class="atlas-table">
+           <thead><tr><th>Requester</th><th>Target Officer</th><th>Decision</th><th>Date</th></tr></thead>
+           <tbody>${(history || []).map(h => `<tr>
+             <td>${h.requester?.full_name || '—'}</td>
+             <td>${h.officer ? escHtml(`${h.officer.last_name}, ${h.officer.first_name}`) : '—'}</td>
+             <td><span class="badge ${h.status === 'approved' ? 'badge-success' : 'badge-danger'}">${h.status}</span></td>
+             <td>${fmtDate(h.reviewed_at?.split('T')[0])}</td>
+           </tr>`).join('')}</tbody>
+         </table></div>`
+      : '<div class="empty-state"><div class="empty-title">No history yet</div></div>';
+  }
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(type, title, body = '') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}</div>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 3500);
+  }
+
+  await Promise.all([loadPending(), loadApproved(), loadHistory()]);
+</script>
+</body>
+</html>

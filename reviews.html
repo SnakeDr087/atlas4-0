@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Reviews</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Reviews</h1>
+          <p id="result-summary">Loading…</p>
+        </div>
+        <a href="review-new.html" id="new-review-btn"
+           class="btn btn-primary"
+           data-role-only="super_admin,agency_admin,internal_affairs,training_bureau,supervisor"
+           style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M12 5v14M5 12h14"/></svg>
+          New Review
+        </a>
+      </div>
+
+      <!-- Filters -->
+      <div class="card mb-4">
+        <div class="filters-bar">
+          <div class="search-input-wrap" style="max-width:280px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="filter-search" placeholder="Case # or officer last name…">
+          </div>
+          <select id="filter-outcome" style="max-width:170px;">
+            <option value="">All Outcomes</option>
+            <option value="no_action">No Action</option>
+            <option value="commendation">Commendation</option>
+            <option value="coaching">Coaching</option>
+            <option value="training">Training</option>
+            <option value="internal_affairs">IA Referral</option>
+            <option value="pip">PIP</option>
+          </select>
+          <select id="filter-status" style="max-width:160px;">
+            <option value="">All Statuses</option>
+            <option value="draft">Draft</option>
+            <option value="pending_approval">Pending Approval</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <select id="filter-incident-type" style="max-width:190px;">
+            <option value="">All Incident Types</option>
+          </select>
+          <input type="date" id="filter-date-from" title="From date" style="max-width:145px;">
+          <input type="date" id="filter-date-to"   title="To date"   style="max-width:145px;">
+          <button class="btn btn-ghost btn-sm" id="clear-filters">Clear</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="card">
+        <div id="table-loading" style="display:flex;align-items:center;justify-content:center;padding:48px;">
+          <div class="spinner"></div>
+        </div>
+        <div id="table-content" style="display:none;">
+          <div class="table-container">
+            <table class="atlas-table">
+              <thead>
+                <tr>
+                  <th>Case #</th>
+                  <th>Officer</th>
+                  <th>Incident Type</th>
+                  <th>Incident Date</th>
+                  <th>Follow-Up</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="reviews-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="pagination">
+            <span id="pagination-info" style="color:var(--text-muted);font-size:12px;"></span>
+            <div class="pagination-controls" id="pagination-controls"></div>
+          </div>
+        </div>
+        <div id="empty-state" class="empty-state" style="display:none;">
+          <div class="empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6M9 8h6M9 16h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
+          </div>
+          <div class="empty-title">No reviews found</div>
+          <div class="empty-text">No reviews match your current filters.</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const PAGE_SIZE = 25;
+  let currentPage = 0;
+  let totalCount = 0;
+  let debounceTimer;
+  let profile;
+
+  try {
+    const result = await initAuth({ requireAuth: true });
+    profile = result.profile;
+  } catch(e) {
+    console.error('[ATLAS] Auth failed:', e);
+    throw e;
+  }
+  if (!profile) throw new Error('no_profile');
+
+  renderNav(profile, 'reviews');
+  renderTopbar('Reviews');
+
+  // Show New Review for roles that can create
+  document.querySelectorAll('[data-role-only]').forEach(el => {
+    const allowed = el.dataset.roleOnly.split(',').map(r => r.trim());
+    if (allowed.includes(profile.role)) el.style.display = '';
+  });
+
+  // Load incident type filter
+  async function loadIncidentTypeFilter() {
+    try {
+      let q = supabase.from('incident_types').select('id, name').eq('is_active', true).order('display_order');
+      if (profile.agency_id) q = q.or(`agency_id.eq.${profile.agency_id},is_global_default.eq.true`);
+      const { data } = await q;
+      const sel = document.getElementById('filter-incident-type');
+      (data || []).forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        sel.appendChild(opt);
+      });
+    } catch(e) { console.warn('[ATLAS] Incident type filter failed:', e); }
+  }
+
+  async function loadReviews(page = 0) {
+    currentPage = page;
+    document.getElementById('table-loading').style.display = 'flex';
+    document.getElementById('table-content').style.display = 'none';
+    document.getElementById('empty-state').style.display   = 'none';
+
+    const search       = document.getElementById('filter-search').value.trim();
+    const outcome      = document.getElementById('filter-outcome').value;
+    const status       = document.getElementById('filter-status').value;
+    const incidentType = document.getElementById('filter-incident-type').value;
+    const dateFrom     = document.getElementById('filter-date-from').value;
+    const dateTo       = document.getElementById('filter-date-to').value;
+    const from = page * PAGE_SIZE;
+    const to   = from + PAGE_SIZE - 1;
+
+    try {
+      // ── data query ──
+      let q = supabase
+        .from('bwc_reviews')
+        .select(`
+          id, atlas_case_number, incident_date, follow_up_outcome, status, created_at,
+          primary_officer:personnel_roster!primary_officer_id(first_name, last_name, badge_number),
+          incident_type:incident_types(name)
+        `)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (profile.agency_id)          q = q.eq('agency_id', profile.agency_id);
+      if (profile.role === 'supervisor') q = q.eq('reviewing_supervisor_id', profile.id);
+      if (outcome)      q = q.eq('follow_up_outcome', outcome);
+      if (status)       q = q.eq('status', status);
+      if (incidentType) q = q.eq('incident_type_id', incidentType);
+      if (dateFrom)     q = q.gte('incident_date', dateFrom);
+      if (dateTo)       q = q.lte('incident_date', dateTo);
+      if (search) {
+        // search by case number OR officer last name
+        if (search.toUpperCase().startsWith('BWC') || /^\d/.test(search)) {
+          q = q.ilike('atlas_case_number', `%${search}%`);
+          cq = cq.ilike('atlas_case_number', `%${search}%`);
+        } else {
+          // officer name search — fetch matching officer IDs first
+          const { data: matchOfficers } = await supabase
+            .from('personnel_roster')
+            .select('id')
+            .eq('agency_id', profile.agency_id)
+            .ilike('last_name', `%${search}%`);
+          const ids = (matchOfficers || []).map(o => o.id);
+          if (ids.length) {
+            q = q.in('primary_officer_id', ids);
+            cq = cq.in('primary_officer_id', ids);
+          } else {
+            // no matches — force empty result
+            q = q.eq('primary_officer_id', '00000000-0000-0000-0000-000000000000');
+            cq = cq.eq('primary_officer_id', '00000000-0000-0000-0000-000000000000');
+          }
+        }
+      }
+
+      // ── count query ──
+      let cq = supabase.from('bwc_reviews').select('id', { count: 'exact', head: true });
+      if (profile.agency_id)            cq = cq.eq('agency_id', profile.agency_id);
+      if (profile.role === 'supervisor') cq = cq.eq('reviewing_supervisor_id', profile.id);
+      if (outcome)      cq = cq.eq('follow_up_outcome', outcome);
+      if (status)       cq = cq.eq('status', status);
+      if (incidentType) cq = cq.eq('incident_type_id', incidentType);
+      if (dateFrom)     cq = cq.gte('incident_date', dateFrom);
+      if (dateTo)       cq = cq.lte('incident_date', dateTo);
+      if (search)       cq = cq.ilike('atlas_case_number', `%${search}%`);
+
+      const [{ data: reviews, error }, { count }] = await Promise.all([q, cq]);
+
+      document.getElementById('table-loading').style.display = 'none';
+
+      if (error) {
+        console.error('[ATLAS] Reviews load error:', error);
+        document.getElementById('empty-state').style.display = 'block';
+        document.getElementById('result-summary').textContent = 'Error loading reviews';
+        return;
+      }
+
+      totalCount = count || 0;
+
+      if (!reviews?.length) {
+        document.getElementById('empty-state').style.display = 'block';
+        document.getElementById('result-summary').textContent = '0 reviews';
+        return;
+      }
+
+      document.getElementById('result-summary').textContent =
+        `${totalCount.toLocaleString()} review${totalCount !== 1 ? 's' : ''}`;
+
+      document.getElementById('reviews-tbody').innerHTML = reviews.map(r => `
+        <tr onclick="location.href='review-detail.html?id=${r.id}'" style="cursor:pointer;">
+          <td class="col-mono">${r.atlas_case_number || '—'}</td>
+          <td class="col-primary">
+            ${r.primary_officer
+              ? `${r.primary_officer.last_name}, ${r.primary_officer.first_name}
+                 <span style="font-size:11px;color:var(--text-muted);margin-left:4px;">#${r.primary_officer.badge_number || '—'}</span>`
+              : '—'}
+          </td>
+          <td>${r.incident_type?.name || '—'}</td>
+          <td>${fmtDate(r.incident_date)}</td>
+          <td>${outcomeBadge(r.follow_up_outcome)}</td>
+          <td>${statusBadge(r.status)}</td>
+          <td><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:var(--text-muted);"><polyline points="9,18 15,12 9,6"/></svg></td>
+        </tr>
+      `).join('');
+
+      renderPagination();
+      document.getElementById('table-content').style.display = 'block';
+
+    } catch(e) {
+      console.error('[ATLAS] Reviews load exception:', e);
+      document.getElementById('table-loading').style.display = 'none';
+      document.getElementById('empty-state').style.display = 'block';
+      document.getElementById('result-summary').textContent = 'Failed to load';
+    }
+  }
+
+  function renderPagination() {
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+    const from = currentPage * PAGE_SIZE + 1;
+    const to   = Math.min((currentPage + 1) * PAGE_SIZE, totalCount);
+    document.getElementById('pagination-info').textContent = `${from}–${to} of ${totalCount.toLocaleString()}`;
+
+    const controls = document.getElementById('pagination-controls');
+    controls.innerHTML = '';
+
+    const prev = document.createElement('button');
+    prev.className = 'page-btn';
+    prev.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><polyline points="15,18 9,12 15,6"/></svg>';
+    prev.disabled = currentPage === 0;
+    prev.onclick = () => loadReviews(currentPage - 1);
+    controls.appendChild(prev);
+
+    const start = Math.max(0, currentPage - 2);
+    const end   = Math.min(totalPages - 1, currentPage + 2);
+    for (let i = start; i <= end; i++) {
+      const btn = document.createElement('button');
+      btn.className = `page-btn${i === currentPage ? ' active' : ''}`;
+      btn.textContent = i + 1;
+      btn.onclick = () => loadReviews(i);
+      controls.appendChild(btn);
+    }
+
+    const next = document.createElement('button');
+    next.className = 'page-btn';
+    next.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><polyline points="9,18 15,12 9,6"/></svg>';
+    next.disabled = currentPage >= totalPages - 1;
+    next.onclick = () => loadReviews(currentPage + 1);
+    controls.appendChild(next);
+  }
+
+  // Filter listeners
+  ['filter-search','filter-outcome','filter-status','filter-incident-type',
+   'filter-date-from','filter-date-to'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener(id === 'filter-search' ? 'input' : 'change', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => loadReviews(0), 300);
+    });
+  });
+
+  document.getElementById('clear-filters').addEventListener('click', () => {
+    ['filter-search','filter-outcome','filter-status','filter-incident-type',
+     'filter-date-from','filter-date-to'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    loadReviews(0);
+  });
+
+  // Formatters
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  }
+
+  function outcomeBadge(o) {
+    if (!o) return '<span class="badge badge-muted">—</span>';
+    const m = {
+      no_action:        ['No Action',    'badge-no-action'],
+      commendation:     ['Commendation', 'badge-commendation'],
+      coaching:         ['Coaching',     'badge-coaching'],
+      training:         ['Training',     'badge-training'],
+      internal_affairs: ['IA Referral',  'badge-ia'],
+      pip:              ['PIP',          'badge-pip']
+    };
+    const [l, c] = m[o] || [o, 'badge-muted'];
+    return `<span class="badge ${c}">${l}</span>`;
+  }
+
+  function statusBadge(s) {
+    const m = { draft:'badge-draft', pending_approval:'badge-pending', approved:'badge-approved', rejected:'badge-rejected' };
+    const l = s ? s.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()) : '—';
+    return `<span class="badge ${m[s]||'badge-muted'}">${l}</span>`;
+  }
+
+  await loadIncidentTypeFilter();
+  await loadReviews(0);
+</script>
+</body>
+</html>

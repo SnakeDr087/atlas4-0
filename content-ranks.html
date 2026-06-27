@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Rank Structure</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Rank Structure</h1>
+          <p>Define rank names and hierarchy. Higher hierarchy number = higher rank. The system uses hierarchy numbers to enforce review permissions.</p>
+        </div>
+        <button class="btn btn-primary" id="add-rank-btn">+ Add Rank</button>
+      </div>
+
+      <div class="alert alert-info mb-4">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span class="alert-message">Review permissions are enforced by hierarchy number only — not rank name. Higher number reviews lower number. Same number requires Agency Admin approval with 30-day expiry.</span>
+      </div>
+
+      <div class="card">
+        <div id="ranks-loading" style="display:flex;justify-content:center;padding:32px;"><div class="spinner"></div></div>
+        <div id="ranks-list" style="display:none;"></div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Add/Edit Rank Modal -->
+<div class="modal-overlay" id="rank-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="rank-modal-title">Add Rank</div>
+      <button class="modal-close" onclick="closeRankModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Rank Name <span class="required">*</span></label>
+          <input type="text" id="rank-name" placeholder="e.g. Sergeant">
+        </div>
+        <div class="form-group">
+          <label>Hierarchy Number <span class="required">*</span></label>
+          <input type="number" id="rank-hierarchy" min="1" max="99" placeholder="e.g. 3">
+          <div class="form-hint">Must be unique. Higher number = higher rank.</div>
+        </div>
+      </div>
+      <input type="hidden" id="rank-edit-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeRankModal()">Cancel</button>
+      <button class="btn btn-primary" id="save-rank-btn">Save Rank</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin', 'agency_admin']
+  });
+  renderNav(profile, 'content-ranks');
+  renderTopbar('Rank Structure');
+
+  async function loadRanks() {
+    const { data: ranks } = await supabase
+      .from('agency_ranks')
+      .select('id, rank_name, hierarchy_number')
+      .eq('agency_id', profile.agency_id)
+      .order('hierarchy_number', { ascending: false });
+
+    document.getElementById('ranks-loading').style.display = 'none';
+    document.getElementById('ranks-list').style.display = 'block';
+
+    document.getElementById('ranks-list').innerHTML = (ranks || []).length
+      ? `
+        <div style="display:grid;grid-template-columns:auto 1fr auto;gap:0;align-items:center;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
+               color:var(--text-muted);padding:6px 14px 6px 0;">Hierarchy</div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
+               color:var(--text-muted);padding:6px 0;">Rank Name</div>
+          <div></div>
+        </div>
+        ${(ranks || []).map(r => `
+          <div style="display:grid;grid-template-columns:auto 1fr auto;gap:0;align-items:center;
+               padding:12px 0;border-bottom:1px solid var(--border-subtle);" id="rank-row-${r.id}">
+            <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;
+                 color:var(--accent);width:64px;text-align:center;">${r.hierarchy_number}</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${escHtml(r.rank_name)}</div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-ghost btn-sm" onclick="openEditRank('${r.id}', '${escHtml(r.rank_name)}', ${r.hierarchy_number})">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteRank('${r.id}')">Remove</button>
+            </div>
+          </div>`).join('')}
+        `
+      : '<div style="color:var(--text-muted);font-size:13px;padding:16px 0;">No ranks defined. Add your agency\'s rank structure above.</div>';
+  }
+
+  document.getElementById('add-rank-btn').addEventListener('click', () => {
+    document.getElementById('rank-modal-title').textContent = 'Add Rank';
+    document.getElementById('rank-edit-id').value = '';
+    document.getElementById('rank-name').value = '';
+    document.getElementById('rank-hierarchy').value = '';
+    document.getElementById('rank-modal').classList.add('open');
+  });
+
+  window.openEditRank = function(id, name, hierarchy) {
+    document.getElementById('rank-modal-title').textContent = 'Edit Rank';
+    document.getElementById('rank-edit-id').value    = id;
+    document.getElementById('rank-name').value       = name;
+    document.getElementById('rank-hierarchy').value  = hierarchy;
+    document.getElementById('rank-modal').classList.add('open');
+  };
+
+  document.getElementById('save-rank-btn').addEventListener('click', async () => {
+    const name      = document.getElementById('rank-name').value.trim();
+    const hierarchy = parseInt(document.getElementById('rank-hierarchy').value);
+    const editId    = document.getElementById('rank-edit-id').value;
+
+    if (!name || !hierarchy) {
+      showToast('error', 'Required', 'Rank name and hierarchy number are required.');
+      return;
+    }
+
+    let error;
+    if (editId) {
+      ({ error } = await supabase.from('agency_ranks')
+        .update({ rank_name: name, hierarchy_number: hierarchy, updated_at: new Date().toISOString() })
+        .eq('id', editId));
+    } else {
+      ({ error } = await supabase.from('agency_ranks')
+        .insert({ agency_id: profile.agency_id, rank_name: name, hierarchy_number: hierarchy }));
+    }
+
+    if (error) {
+      showToast('error', 'Failed', error.message.includes('unique') ? 'That hierarchy number is already in use.' : error.message);
+      return;
+    }
+
+    closeRankModal();
+    showToast('success', editId ? 'Rank updated' : 'Rank added');
+    await loadRanks();
+  });
+
+  window.deleteRank = async function(rankId) {
+    if (!confirm('Remove this rank? Officers assigned this rank will have their rank cleared.')) return;
+    const { error } = await supabase.from('agency_ranks').delete().eq('id', rankId);
+    if (error) { showToast('error', 'Failed', error.message); return; }
+    showToast('success', 'Rank removed');
+    await loadRanks();
+  };
+
+  window.closeRankModal = () => document.getElementById('rank-modal').classList.remove('open');
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');
+  }
+
+  function showToast(type, title, body = '') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}</div>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 3500);
+  }
+
+  await loadRanks();
+</script>
+</body>
+</html>

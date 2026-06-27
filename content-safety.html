@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Safety Checklist</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Officer Safety Checklist</h1>
+          <p>Items that appear on every BWC review regardless of incident type.</p>
+        </div>
+        <button class="btn btn-primary" id="add-item-btn">+ Add Item</button>
+      </div>
+
+      <div class="card">
+        <div id="items-loading" style="display:flex;justify-content:center;padding:32px;"><div class="spinner"></div></div>
+        <div id="items-list" style="display:none;"></div>
+        <div id="add-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+          <div class="form-row" style="align-items:end;">
+            <div class="form-group" style="margin:0;">
+              <label>Item Text <span class="required">*</span></label>
+              <input type="text" id="new-item-text" placeholder="e.g. Officer maintained safe distance from subject">
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary" id="save-item-btn">Add</button>
+              <button class="btn btn-ghost" id="cancel-item-btn">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin', 'agency_admin']
+  });
+  renderNav(profile, 'content-safety');
+  renderTopbar('Safety Checklist');
+
+  async function loadItems() {
+    const { data: items } = await supabase
+      .from('safety_checklist_items')
+      .select('id, item_text, is_active, display_order')
+      .or(`agency_id.eq.${profile.agency_id},agency_id.is.null`)
+      .order('display_order');
+
+    document.getElementById('items-loading').style.display = 'none';
+    document.getElementById('items-list').style.display = 'block';
+
+    document.getElementById('items-list').innerHTML = (items || []).length
+      ? (items || []).map((item, i) => `
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 0;
+               border-bottom:1px solid var(--border-subtle);opacity:${item.is_active ? 1 : 0.5};"
+               id="item-row-${item.id}">
+            <div style="color:var(--text-muted);font-size:12px;font-family:var(--font-mono);width:24px;">
+              ${i + 1}
+            </div>
+            <div style="flex:1;font-size:13px;color:var(--text-secondary);" id="item-text-${item.id}">
+              ${escHtml(item.item_text)}
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-ghost btn-sm" onclick="editItem('${item.id}', '${escHtml(item.item_text)}')">Edit</button>
+              <button class="btn btn-ghost btn-sm" onclick="toggleItem('${item.id}', ${item.is_active})">
+                ${item.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+            </div>
+          </div>`).join('')
+      : '<div style="color:var(--text-muted);font-size:13px;padding:16px 0;">No checklist items yet. Add some above.</div>';
+  }
+
+  document.getElementById('add-item-btn').addEventListener('click', () => {
+    document.getElementById('add-form').style.display = 'block';
+    document.getElementById('new-item-text').focus();
+  });
+  document.getElementById('cancel-item-btn').addEventListener('click', () => {
+    document.getElementById('add-form').style.display = 'none';
+    document.getElementById('new-item-text').value = '';
+  });
+
+  document.getElementById('save-item-btn').addEventListener('click', async () => {
+    const text = document.getElementById('new-item-text').value.trim();
+    if (!text) return;
+    const { data: last } = await supabase.from('safety_checklist_items')
+      .select('display_order').eq('agency_id', profile.agency_id)
+      .order('display_order', { ascending: false }).limit(1).single();
+    const { error } = await supabase.from('safety_checklist_items').insert({
+      agency_id: profile.agency_id, item_text: text,
+      display_order: (last?.display_order || 0) + 1
+    });
+    if (error) { showToast('error', 'Failed', error.message); return; }
+    document.getElementById('new-item-text').value = '';
+    document.getElementById('add-form').style.display = 'none';
+    showToast('success', 'Item added');
+    await loadItems();
+  });
+
+  window.editItem = function(itemId, currentText) {
+    const textEl = document.getElementById(`item-text-${itemId}`);
+    textEl.innerHTML = `
+      <input type="text" value="${currentText}" id="edit-input-${itemId}"
+             style="width:100%;background:var(--bg-base);border:1px solid var(--border-focus);
+             border-radius:var(--border-radius);padding:6px 8px;color:var(--text-primary);">
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button class="btn btn-primary btn-sm" onclick="saveEdit('${itemId}')">Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadItems()">Cancel</button>
+      </div>`;
+  };
+
+  window.saveEdit = async function(itemId) {
+    const text = document.getElementById(`edit-input-${itemId}`).value.trim();
+    if (!text) return;
+    await supabase.from('safety_checklist_items').update({ item_text: text }).eq('id', itemId);
+    showToast('success', 'Item updated');
+    await loadItems();
+  };
+
+  window.toggleItem = async function(itemId, isActive) {
+    await supabase.from('safety_checklist_items').update({ is_active: !isActive }).eq('id', itemId);
+    await loadItems();
+    showToast('success', isActive ? 'Item deactivated' : 'Item activated');
+  };
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');
+  }
+
+  function showToast(type, title) {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div></div>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 3000);
+  }
+
+  await loadItems();
+</script>
+</body>
+</html>

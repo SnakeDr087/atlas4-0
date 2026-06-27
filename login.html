@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Sign In</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="auth-page">
+  <div class="auth-card">
+
+    <div class="auth-logo">
+      <img src="logo.png" alt="ATLAS Logo">
+      <div class="logo-wordmark">ATL<span>A</span>S</div>
+      <div class="logo-sub">Performance Management System</div>
+    </div>
+
+    <h2 class="auth-title">Sign In</h2>
+    <p class="auth-subtitle">Enter your credentials to access ATLAS.</p>
+
+    <div id="error-alert" class="alert alert-danger" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      <span class="alert-message" id="error-message"></span>
+    </div>
+
+    <form id="login-form" novalidate>
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" name="email"
+               placeholder="you@agency.gov"
+               autocomplete="email" required>
+        <div class="form-error" id="email-error">Please enter a valid email address.</div>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password"
+               placeholder="••••••••"
+               autocomplete="current-password" required>
+        <div class="form-error" id="password-error">Please enter your password.</div>
+      </div>
+
+      <div class="flex justify-between items-center" style="margin-bottom:20px;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;margin:0;">
+          <input type="checkbox" id="remember" style="width:auto;">
+          <span style="font-size:14px;color:var(--text-secondary);font-weight:500;">Remember me</span>
+        </label>
+        <a href="forgot-password.html"
+           style="font-size:14px;font-weight:600;color:var(--accent);">
+          Forgot password?
+        </a>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full btn-lg" id="submit-btn">
+        Sign In
+      </button>
+
+      <div style="text-align:center;margin-top:16px;">
+        <a href="forgot-password.html"
+           style="font-size:13px;color:var(--text-muted);text-decoration:underline;text-underline-offset:3px;">
+          Can&#39;t access your account? Reset your password
+        </a>
+      </div>
+    </form>
+
+    <p style="text-align:center;margin-top:24px;font-size:12px;color:var(--text-muted);">
+      ATLAS is a supervisory tool. Access is provisioned by your agency administrator.
+    </p>
+
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth, signIn, redirectToDashboard } from './auth.js';
+
+  // If already signed in, go to dashboard
+  initAuth({ requireAuth: false }).then(({ profile }) => {
+    if (profile) redirectToDashboard();
+  });
+
+  const form    = document.getElementById('login-form');
+  const btn     = document.getElementById('submit-btn');
+  const errBox  = document.getElementById('error-alert');
+  const errMsg  = document.getElementById('error-message');
+
+  function showError(msg) {
+    errMsg.textContent = msg;
+    errBox.style.display = 'flex';
+  }
+
+  function clearError() {
+    errBox.style.display = 'none';
+  }
+
+  function setLoading(loading) {
+    btn.classList.toggle('btn-loading', loading);
+    btn.disabled = loading;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearError();
+
+    const email    = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    // Client-side validation
+    let valid = true;
+
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      document.getElementById('email-error').classList.add('visible');
+      valid = false;
+    } else {
+      document.getElementById('email-error').classList.remove('visible');
+    }
+
+    if (!password) {
+      document.getElementById('password-error').classList.add('visible');
+      valid = false;
+    } else {
+      document.getElementById('password-error').classList.remove('visible');
+    }
+
+    if (!valid) return;
+
+    setLoading(true);
+
+    const { profile, error } = await signIn(email, password);
+
+    setLoading(false);
+
+    if (error) {
+      showError(error);
+      return;
+    }
+
+    // Redirect to intended page if ?redirect= param exists
+    const params   = new URLSearchParams(window.location.search);
+    const redirect = params.get('redirect');
+
+    if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
+      window.location.href = redirect;
+    } else {
+      redirectToDashboard();
+    }
+  });
+</script>
+</body>
+</html>

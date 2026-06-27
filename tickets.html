@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Trouble Tickets</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Trouble Tickets</h1>
+          <p>Report issues to ATLAS support. All tickets are directed to the ATLAS Super Admin.</p>
+        </div>
+        <button class="btn btn-primary" id="new-ticket-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M12 5v14M5 12h14"/></svg>
+          New Ticket
+        </button>
+      </div>
+
+      <!-- Filter -->
+      <div class="card mb-4">
+        <div class="filters-bar">
+          <select id="filter-status" style="max-width:160px;">
+            <option value="">All Statuses</option>
+            <option value="open">Open</option>
+            <option value="in_progress">In Progress</option>
+            <option value="resolved">Resolved</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="clear-filters">Clear</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="tickets-loading" style="display:flex;justify-content:center;padding:32px;"><div class="spinner"></div></div>
+        <div id="tickets-content" style="display:none;"></div>
+        <div id="tickets-empty" class="empty-state" style="display:none;">
+          <div class="empty-title">No tickets</div>
+          <div class="empty-text">Submit a ticket if you encounter issues with ATLAS.</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- New Ticket Modal -->
+<div class="modal-overlay" id="ticket-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">New Trouble Ticket</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Subject <span class="required">*</span></label>
+        <input type="text" id="ticket-subject" placeholder="Brief description of the issue">
+      </div>
+      <div class="form-group">
+        <label>Description <span class="required">*</span></label>
+        <textarea id="ticket-description" rows="5"
+          placeholder="Describe the issue in detail. Include what you were doing, what you expected, and what happened instead."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="submit-ticket-btn">Submit Ticket</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ticket detail modal -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="detail-title"></div>
+      <button class="modal-close" onclick="document.getElementById('detail-modal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer" id="detail-footer"></div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({ requireAuth: true });
+  renderNav(profile, 'tickets');
+  renderTopbar('Trouble Tickets');
+
+  const isSuperAdmin  = profile.role === 'super_admin';
+  const isAgencyAdmin = profile.role === 'agency_admin';
+
+  async function loadTickets(statusFilter = '') {
+    document.getElementById('tickets-loading').style.display = 'flex';
+    document.getElementById('tickets-content').style.display = 'none';
+    document.getElementById('tickets-empty').style.display   = 'none';
+
+    let q = supabase.from('trouble_tickets')
+      .select('id, subject, status, created_at, updated_at, creator:profiles!created_by(full_name)')
+      .order('created_at', { ascending: false });
+
+    if (isSuperAdmin) {
+      // See all tickets
+    } else if (isAgencyAdmin) {
+      q = q.eq('agency_id', profile.agency_id);
+    } else {
+      q = q.eq('created_by', profile.id);
+    }
+
+    if (statusFilter) q = q.eq('status', statusFilter);
+    const { data: tickets } = await q;
+
+    document.getElementById('tickets-loading').style.display = 'none';
+
+    if (!tickets?.length) {
+      document.getElementById('tickets-empty').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('tickets-content').style.display = 'block';
+    document.getElementById('tickets-content').innerHTML = `
+      <div class="table-container">
+        <table class="atlas-table">
+          <thead><tr><th>Subject</th><th>Submitted By</th><th>Opened</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${tickets.map(t => `
+              <tr style="cursor:pointer;" onclick="openDetail('${t.id}')">
+                <td class="col-primary">${escHtml(t.subject)}</td>
+                <td style="font-size:12px;">${t.creator?.full_name || '—'}</td>
+                <td>${fmtDate(t.created_at?.split('T')[0])}</td>
+                <td><span class="badge ${t.status === 'resolved' ? 'badge-success' : t.status === 'in_progress' ? 'badge-warning' : 'badge-muted'}">${(t.status || '').replace('_',' ')}</span></td>
+                <td><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:var(--text-muted);"><polyline points="9,18 15,12 9,6"/></svg></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  window.openDetail = async function(ticketId) {
+    const { data: t } = await supabase.from('trouble_tickets')
+      .select('*, creator:profiles!created_by(full_name, role, agencies(name))')
+      .eq('id', ticketId).single();
+    if (!t) return;
+
+    document.getElementById('detail-title').textContent = t.subject;
+    document.getElementById('detail-body').innerHTML = `
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:8px 12px;margin-bottom:16px;font-size:13px;">
+        <span style="color:var(--text-muted);">Status</span>
+        <span><span class="badge ${t.status === 'resolved' ? 'badge-success' : t.status === 'in_progress' ? 'badge-warning' : 'badge-muted'}">${(t.status || '').replace('_',' ')}</span></span>
+        <span style="color:var(--text-muted);">Submitted by</span>
+        <span>${t.creator?.full_name || '—'} · ${t.creator?.agencies?.name || ''}</span>
+        <span style="color:var(--text-muted);">Opened</span>
+        <span>${fmtDate(t.created_at?.split('T')[0])}</span>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;">Description</div>
+      <div style="font-size:13px;color:var(--text-secondary);white-space:pre-wrap;background:var(--bg-elevated);
+           border-radius:var(--border-radius);padding:12px 14px;">${escHtml(t.description)}</div>
+      ${t.resolution_notes ? `
+        <div style="margin-top:16px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;">Resolution Notes</div>
+          <div style="font-size:13px;color:var(--text-secondary);white-space:pre-wrap;">${escHtml(t.resolution_notes)}</div>
+        </div>` : ''}
+      ${(isSuperAdmin || isAgencyAdmin) && t.status !== 'resolved' ? `
+        <div style="margin-top:16px;">
+          <label style="margin-bottom:6px;display:block;">Update Status</label>
+          <div style="display:flex;gap:8px;">
+            <select id="detail-status-select" style="flex:1;">
+              <option value="open" ${t.status === 'open' ? 'selected' : ''}>Open</option>
+              <option value="in_progress" ${t.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
+              <option value="resolved" ${t.status === 'resolved' ? 'selected' : ''}>Resolved</option>
+            </select>
+          </div>
+          <label style="margin:10px 0 6px;display:block;">Resolution Notes</label>
+          <textarea id="detail-resolution" rows="3" placeholder="Add resolution notes…">${t.resolution_notes || ''}</textarea>
+        </div>` : ''}`;
+
+    const footer = document.getElementById('detail-footer');
+    footer.innerHTML = `<button class="btn btn-ghost" onclick="document.getElementById('detail-modal').classList.remove('open')">Close</button>`;
+
+    if ((isSuperAdmin || isAgencyAdmin) && t.status !== 'resolved') {
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn btn-primary';
+      saveBtn.textContent = 'Save';
+      saveBtn.onclick = async () => {
+        const newStatus = document.getElementById('detail-status-select').value;
+        const notes     = document.getElementById('detail-resolution').value.trim();
+        const payload   = { status: newStatus, resolution_notes: notes || null, updated_at: new Date().toISOString() };
+        if (newStatus === 'resolved') { payload.resolved_at = new Date().toISOString(); payload.resolved_by = profile.id; }
+        await supabase.from('trouble_tickets').update(payload).eq('id', ticketId);
+        document.getElementById('detail-modal').classList.remove('open');
+        showToast('success', 'Ticket updated');
+        await loadTickets(document.getElementById('filter-status').value);
+      };
+      footer.appendChild(saveBtn);
+    }
+
+    document.getElementById('detail-modal').classList.add('open');
+  };
+
+  // New ticket
+  document.getElementById('new-ticket-btn').addEventListener('click', () => {
+    document.getElementById('ticket-subject').value = '';
+    document.getElementById('ticket-description').value = '';
+    document.getElementById('ticket-modal').classList.add('open');
+  });
+
+  document.getElementById('submit-ticket-btn').addEventListener('click', async () => {
+    const subject = document.getElementById('ticket-subject').value.trim();
+    const desc    = document.getElementById('ticket-description').value.trim();
+    if (!subject || !desc) { showToast('error', 'Required', 'Subject and description required.'); return; }
+
+    const btn = document.getElementById('submit-ticket-btn');
+    btn.classList.add('btn-loading'); btn.disabled = true;
+
+    const { error } = await supabase.from('trouble_tickets').insert({
+      agency_id:   profile.agency_id,
+      created_by:  profile.id,
+      subject, description: desc
+    });
+
+    btn.classList.remove('btn-loading'); btn.disabled = false;
+    if (error) { showToast('error', 'Failed', error.message); return; }
+    closeModal();
+    showToast('success', 'Ticket submitted', 'The ATLAS team will respond shortly.');
+    await loadTickets();
+  });
+
+  document.getElementById('filter-status').addEventListener('change', (e) => loadTickets(e.target.value));
+  document.getElementById('clear-filters').addEventListener('click', () => {
+    document.getElementById('filter-status').value = '';
+    loadTickets();
+  });
+
+  window.closeModal = () => document.getElementById('ticket-modal').classList.remove('open');
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(type, title, body = '') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}</div>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 4000);
+  }
+
+  await loadTickets();
+</script>
+</body>
+</html>

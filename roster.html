@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Roster</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--border-radius-lg);
+      padding: 32px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all var(--transition);
+      background: var(--bg-elevated);
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .upload-zone svg { margin: 0 auto 12px; color: var(--text-muted); }
+    .col-map-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .col-map-label {
+      font-size: 12px; font-weight: 600;
+      color: var(--text-secondary);
+      text-align: right;
+    }
+    .col-map-arrow {
+      color: var(--accent);
+      font-size: 16px;
+    }
+    .preview-table-wrap {
+      overflow-x: auto;
+      max-height: 220px;
+      border: 1px solid var(--border);
+      border-radius: var(--border-radius);
+    }
+    .preview-table { font-size: 12px; }
+    .preview-table th { background: var(--bg-elevated); font-size: 11px; }
+    .import-progress {
+      height: 6px;
+      background: var(--bg-overlay);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .import-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Department Roster</h1>
+          <p id="roster-sub">Officer records for this agency</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" id="upload-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload CSV
+          </button>
+          <button class="btn btn-primary" id="add-officer-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M12 5v14M5 12h14"/></svg>
+            Add Officer
+          </button>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="card mb-4">
+        <div class="filters-bar">
+          <div class="search-input-wrap" style="max-width:260px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="search-officers" placeholder="Name or badge #…">
+          </div>
+          <select id="filter-rank" style="max-width:180px;">
+            <option value="">All Ranks</option>
+          </select>
+          <select id="filter-status" style="max-width:150px;">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="on_leave">On Leave</option>
+            <option value="terminated">Terminated</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="clear-filters">Clear</button>
+        </div>
+      </div>
+
+      <!-- Officers table -->
+      <div class="card">
+        <div class="flex items-center justify-between" style="margin-bottom:12px;">
+          <div class="card-title" id="officer-count">Loading…</div>
+        </div>
+        <div id="officers-loading" style="display:flex;justify-content:center;padding:40px;">
+          <div class="spinner"></div>
+        </div>
+        <div id="officers-content" style="display:none;">
+          <div class="table-container">
+            <table class="atlas-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Badge #</th>
+                  <th>Rank</th>
+                  <th>Hire Date</th>
+                  <th>Score</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="officers-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination">
+            <span id="pagination-info" style="font-size:12px;color:var(--text-muted);"></span>
+            <div class="pagination-controls" id="pagination-controls"></div>
+          </div>
+        </div>
+        <div id="officers-empty" class="empty-state" style="display:none;">
+          <div class="empty-title">No officers on file</div>
+          <div class="empty-text">Add officers manually or upload a CSV to get started.</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ADD / EDIT OFFICER MODAL -->
+<div class="modal-overlay" id="officer-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="officer-modal-title">Add Officer</div>
+      <button class="modal-close" onclick="closeOfficerModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>First Name <span class="required">*</span></label>
+          <input type="text" id="of-first">
+        </div>
+        <div class="form-group">
+          <label>Last Name <span class="required">*</span></label>
+          <input type="text" id="of-last">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Badge Number</label>
+          <input type="text" id="of-badge" placeholder="e.g. 4721">
+        </div>
+        <div class="form-group">
+          <label>Rank</label>
+          <select id="of-rank">
+            <option value="">— Select rank —</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Hire Date</label>
+          <input type="date" id="of-hire">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="of-email">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="of-status">
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="on_leave">On Leave</option>
+          <option value="terminated">Terminated</option>
+        </select>
+      </div>
+      <input type="hidden" id="of-edit-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeOfficerModal()">Cancel</button>
+      <button class="btn btn-primary" id="save-officer-btn">Save Officer</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV UPLOAD MODAL -->
+<div class="modal-overlay" id="upload-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title">Upload Officer Roster (CSV)</div>
+      <button class="modal-close" onclick="document.getElementById('upload-modal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Upload zone -->
+      <div id="upload-step-1">
+        <div class="upload-zone" id="drop-zone" onclick="document.getElementById('csv-input').click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+               style="width:40px;height:40px;">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">
+            Drop CSV file here or click to browse
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);">
+            Accepts .csv files exported from any RMS or spreadsheet
+          </div>
+        </div>
+        <input type="file" id="csv-input" accept=".csv" style="display:none;">
+
+        <div style="margin-top:16px;padding:12px 14px;background:var(--bg-elevated);border-radius:var(--border-radius);">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">Expected CSV columns (any order, any header name):</div>
+          <div style="font-size:12px;color:var(--text-muted);">
+            First Name · Last Name · Badge Number · Rank · Hire Date · Email (Phone optional)
+          </div>
+        </div>
+      </div>
+
+      <!-- Column mapping -->
+      <div id="upload-step-2" style="display:none;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Map your columns</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;">
+          Match your CSV columns to ATLAS fields. Required fields are marked.
+        </div>
+        <div id="col-mapping"></div>
+
+        <div style="margin-top:16px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">
+            Preview (first 5 rows)
+          </div>
+          <div class="preview-table-wrap">
+            <table class="atlas-table preview-table">
+              <thead id="preview-head"></thead>
+              <tbody id="preview-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Import progress -->
+      <div id="upload-step-3" style="display:none;text-align:center;padding:24px 0;">
+        <div class="spinner spinner-lg" style="margin:0 auto 16px;"></div>
+        <div style="font-size:14px;font-weight:600;" id="import-status">Importing officers…</div>
+        <div class="import-progress" style="margin-top:12px;">
+          <div class="import-bar" id="import-bar" style="width:0%;"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="import-count"></div>
+      </div>
+
+      <!-- Import complete -->
+      <div id="upload-step-4" style="display:none;text-align:center;padding:24px 0;">
+        <div style="width:56px;height:56px;border-radius:50%;background:var(--success-dim);
+             display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"
+               style="width:24px;height:24px;"><polyline points="20,6 9,17 4,12"/></svg>
+        </div>
+        <div style="font-size:15px;font-weight:700;" id="import-complete-msg">Import complete</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;" id="import-summary"></div>
+      </div>
+
+    </div>
+    <div class="modal-footer" id="upload-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('upload-modal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" id="upload-next-btn" style="display:none;" onclick="runImport()">
+        Import Officers
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script src="error-handler.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const PAGE_SIZE = 25;
+  let currentPage = 0;
+  let totalCount  = 0;
+  let ranks       = [];
+  let csvRows     = [];
+  let csvHeaders  = [];
+  let agencyId;
+  let debounce;
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin', 'agency_admin', 'supervisor']
+  });
+  renderNav(profile, 'roster');
+  renderTopbar('Roster');
+
+  agencyId = profile.agency_id;
+
+  // Load ranks for dropdowns
+  async function loadRanks() {
+    const { data } = await supabase
+      .from('agency_ranks')
+      .select('id, rank_name, hierarchy_number')
+      .eq('agency_id', agencyId)
+      .order('hierarchy_number', { ascending: false });
+    ranks = data || [];
+
+    const filterSel = document.getElementById('filter-rank');
+    const ofSel     = document.getElementById('of-rank');
+    ranks.forEach(r => {
+      [filterSel, ofSel].forEach(sel => {
+        const opt = document.createElement('option');
+        opt.value = r.id; opt.textContent = r.rank_name;
+        sel.appendChild(opt);
+      });
+    });
+  }
+
+  // ── LOAD OFFICERS ──────────────────────────────────────
+  async function loadOfficers(page = 0) {
+    currentPage = page;
+    document.getElementById('officers-loading').style.display = 'flex';
+    document.getElementById('officers-content').style.display = 'none';
+    document.getElementById('officers-empty').style.display   = 'none';
+
+    const search = document.getElementById('search-officers').value.trim();
+    const rank   = document.getElementById('filter-rank').value;
+    const status = document.getElementById('filter-status').value;
+    const from = page * PAGE_SIZE, to = from + PAGE_SIZE - 1;
+
+    let q = supabase
+      .from('personnel_roster')
+      .select(`id, first_name, last_name, badge_number, hire_date,
+               performance_score, officer_status, email,
+               rank:agency_ranks(rank_name)`)
+      .eq('agency_id', agencyId)
+      .order('last_name')
+      .range(from, to);
+
+    if (search) q = q.or(`last_name.ilike.%${search}%,first_name.ilike.%${search}%,badge_number.ilike.%${search}%`);
+    if (rank)   q = q.eq('rank_id', rank);
+    if (status) q = q.eq('officer_status', status);
+
+    // Count
+    let cq = supabase.from('personnel_roster').select('id', { count:'exact', head:true }).eq('agency_id', agencyId);
+    if (status) cq = cq.eq('officer_status', status);
+    const { count } = await cq;
+    totalCount = count ?? 0;
+
+    const { data: officers, error } = await q;
+    document.getElementById('officers-loading').style.display = 'none';
+
+    if (error || !officers?.length) {
+      document.getElementById('officers-empty').style.display = 'block';
+      document.getElementById('officer-count').textContent = '0 officers';
+      return;
+    }
+
+    document.getElementById('officer-count').textContent =
+      `${totalCount.toLocaleString()} officer${totalCount !== 1 ? 's' : ''}`;
+    document.getElementById('roster-sub').textContent =
+      `${totalCount} officer${totalCount !== 1 ? 's' : ''} · ${profile.agencies?.name || ''}`;
+
+    const tbody = document.getElementById('officers-tbody');
+    tbody.innerHTML = officers.map(o => `
+      <tr>
+        <td class="col-primary">${escHtml(o.last_name)}, ${escHtml(o.first_name)}</td>
+        <td class="mono">${o.badge_number || '—'}</td>
+        <td style="font-size:13px;">${o.rank?.rank_name || '—'}</td>
+        <td style="font-size:13px;">${o.hire_date ? fmtDate(o.hire_date) : '—'}</td>
+        <td class="mono" style="color:${scoreColor(o.performance_score)};">
+          ${o.performance_score != null ? Math.round(o.performance_score) : '—'}
+        </td>
+        <td>
+          <span class="badge ${statusBadge(o.officer_status)}">
+            ${o.officer_status?.replace('_',' ') || '—'}
+          </span>
+        </td>
+        <td style="display:flex;gap:6px;">
+          <button class="btn btn-ghost btn-sm" onclick="editOfficer('${o.id}')">Edit</button>
+          <a href="officer-profile.html?id=${o.id}" class="btn btn-ghost btn-sm">Profile</a>
+        </td>
+      </tr>`).join('');
+
+    renderPagination();
+    document.getElementById('officers-content').style.display = 'block';
+  }
+
+  function renderPagination() {
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+    const from = currentPage * PAGE_SIZE + 1;
+    const to   = Math.min((currentPage + 1) * PAGE_SIZE, totalCount);
+    document.getElementById('pagination-info').textContent = `${from}–${to} of ${totalCount}`;
+    const ctrl = document.getElementById('pagination-controls');
+    ctrl.innerHTML = '';
+    const prev = document.createElement('button');
+    prev.className = 'page-btn'; prev.textContent = '←';
+    prev.disabled = currentPage === 0;
+    prev.onclick = () => loadOfficers(currentPage - 1);
+    ctrl.appendChild(prev);
+    const next = document.createElement('button');
+    next.className = 'page-btn'; next.textContent = '→';
+    next.disabled = currentPage >= totalPages - 1;
+    next.onclick = () => loadOfficers(currentPage + 1);
+    ctrl.appendChild(next);
+  }
+
+  // ── ADD / EDIT OFFICER ─────────────────────────────────
+  document.getElementById('add-officer-btn').addEventListener('click', () => {
+    document.getElementById('officer-modal-title').textContent = 'Add Officer';
+    document.getElementById('of-edit-id').value = '';
+    ['of-first','of-last','of-badge','of-hire','of-email'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('of-rank').value   = '';
+    document.getElementById('of-status').value = 'active';
+    document.getElementById('officer-modal').classList.add('open');
+  });
+
+  window.editOfficer = async function(id) {
+    const { data: o } = await supabase
+      .from('personnel_roster').select('*').eq('id', id).single();
+    if (!o) return;
+    document.getElementById('officer-modal-title').textContent = 'Edit Officer';
+    document.getElementById('of-edit-id').value   = o.id;
+    document.getElementById('of-first').value     = o.first_name || '';
+    document.getElementById('of-last').value      = o.last_name  || '';
+    document.getElementById('of-badge').value     = o.badge_number || '';
+    document.getElementById('of-hire').value      = o.hire_date || '';
+    document.getElementById('of-email').value     = o.email || '';
+    document.getElementById('of-rank').value      = o.rank_id || '';
+    document.getElementById('of-status').value    = o.officer_status || 'active';
+    document.getElementById('officer-modal').classList.add('open');
+  };
+
+  document.getElementById('save-officer-btn').addEventListener('click', async () => {
+    const first = document.getElementById('of-first').value.trim();
+    const last  = document.getElementById('of-last').value.trim();
+    if (!first || !last) {
+      showToast('error', 'Required', 'First and last name are required.');
+      return;
+    }
+    const btn = document.getElementById('save-officer-btn');
+    btn.classList.add('btn-loading'); btn.disabled = true;
+
+    const editId = document.getElementById('of-edit-id').value;
+    const payload = {
+      first_name:     first,
+      last_name:      last,
+      badge_number:   document.getElementById('of-badge').value.trim() || null,
+      rank_id:        document.getElementById('of-rank').value || null,
+      hire_date:      document.getElementById('of-hire').value || null,
+      email:          document.getElementById('of-email').value.trim() || null,
+      officer_status: document.getElementById('of-status').value,
+      agency_id:      agencyId,
+      updated_at:     new Date().toISOString()
+    };
+
+    let error;
+    if (editId) {
+      ({ error } = await supabase.from('personnel_roster').update(payload).eq('id', editId));
+    } else {
+      ({ error } = await supabase.from('personnel_roster').insert(payload));
+    }
+
+    btn.classList.remove('btn-loading'); btn.disabled = false;
+    if (error) { showToast('error', 'Failed', error.message); return; }
+    closeOfficerModal();
+    showToast('success', editId ? 'Officer updated' : 'Officer added');
+    await loadOfficers(0);
+  });
+
+  window.closeOfficerModal = () =>
+    document.getElementById('officer-modal').classList.remove('open');
+
+  // ── CSV UPLOAD ─────────────────────────────────────────
+  document.getElementById('upload-btn').addEventListener('click', () => {
+    resetUpload();
+    document.getElementById('upload-modal').classList.add('open');
+  });
+
+  const dropZone = document.getElementById('drop-zone');
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) handleCsvFile(file);
+  });
+  document.getElementById('csv-input').addEventListener('change', e => {
+    if (e.target.files[0]) handleCsvFile(e.target.files[0]);
+  });
+
+  function handleCsvFile(file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = e.target.result;
+      parseCsv(text);
+    };
+    reader.readAsText(file);
+  }
+
+  function parseCsv(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) { showToast('error', 'Invalid CSV', 'File must have at least a header row and one data row.'); return; }
+
+    csvHeaders = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    csvRows = lines.slice(1).map(line => {
+      const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      const obj = {};
+      csvHeaders.forEach((h, i) => { obj[h] = vals[i] || ''; });
+      return obj;
+    }).filter(row => Object.values(row).some(v => v));
+
+    showUploadStep2();
+  }
+
+  function showUploadStep2() {
+    document.getElementById('upload-step-1').style.display = 'none';
+    document.getElementById('upload-step-2').style.display = 'block';
+    document.getElementById('upload-next-btn').style.display = '';
+
+    // Auto-map columns by common names
+    const ATLAS_FIELDS = [
+      { key: 'first_name',   label: 'First Name', required: true,  hints: ['first','fname','firstname','first name'] },
+      { key: 'last_name',    label: 'Last Name',  required: true,  hints: ['last','lname','lastname','last name','surname'] },
+      { key: 'badge_number', label: 'Badge #',    required: false, hints: ['badge','id','officer id','badge number','badgeno'] },
+      { key: 'rank',         label: 'Rank',       required: false, hints: ['rank','title','grade'] },
+      { key: 'hire_date',    label: 'Hire Date',  required: false, hints: ['hire','hired','start','doh','date of hire'] },
+      { key: 'email',        label: 'Email',      required: false, hints: ['email','e-mail','mail'] },
+    ];
+
+    const autoMap = {};
+    ATLAS_FIELDS.forEach(f => {
+      const match = csvHeaders.find(h =>
+        f.hints.some(hint => h.toLowerCase().includes(hint))
+      );
+      autoMap[f.key] = match || '';
+    });
+
+    const mapHtml = ATLAS_FIELDS.map(f => `
+      <div class="col-map-row">
+        <div class="col-map-label">
+          ${f.label}${f.required ? ' <span style="color:var(--danger)">*</span>' : ''}
+        </div>
+        <div class="col-map-arrow">→</div>
+        <select id="map-${f.key}" style="font-size:13px;">
+          <option value="">— Skip —</option>
+          ${csvHeaders.map(h => `<option value="${escHtml(h)}" ${autoMap[f.key] === h ? 'selected' : ''}>${escHtml(h)}</option>`).join('')}
+        </select>
+      </div>`).join('');
+
+    document.getElementById('col-mapping').innerHTML = mapHtml;
+
+    // Preview
+    const previewRows = csvRows.slice(0, 5);
+    document.getElementById('preview-head').innerHTML =
+      `<tr>${csvHeaders.map(h => `<th>${escHtml(h)}</th>`).join('')}</tr>`;
+    document.getElementById('preview-body').innerHTML =
+      previewRows.map(row =>
+        `<tr>${csvHeaders.map(h => `<td>${escHtml(row[h] || '')}</td>`).join('')}</tr>`
+      ).join('');
+  }
+
+  window.runImport = async function() {
+    const firstNameCol = document.getElementById('map-first_name').value;
+    const lastNameCol  = document.getElementById('map-last_name').value;
+
+    if (!firstNameCol || !lastNameCol) {
+      showToast('error', 'Required', 'You must map First Name and Last Name columns.');
+      return;
+    }
+
+    const badgeCol = document.getElementById('map-badge_number').value;
+    const rankCol  = document.getElementById('map-rank').value;
+    const hireCol  = document.getElementById('map-hire_date').value;
+    const emailCol = document.getElementById('map-email').value;
+
+    // Build rank name → id map
+    const rankMap = {};
+    ranks.forEach(r => { rankMap[r.rank_name.toLowerCase()] = r.id; });
+
+    document.getElementById('upload-step-2').style.display = 'none';
+    document.getElementById('upload-step-3').style.display = 'block';
+    document.getElementById('upload-next-btn').style.display = 'none';
+
+    let imported = 0, skipped = 0;
+    const BATCH = 25;
+
+    for (let i = 0; i < csvRows.length; i += BATCH) {
+      const batch = csvRows.slice(i, i + BATCH);
+      const records = batch
+        .filter(row => row[firstNameCol]?.trim() && row[lastNameCol]?.trim())
+        .map(row => ({
+          agency_id:      agencyId,
+          first_name:     row[firstNameCol]?.trim(),
+          last_name:      row[lastNameCol]?.trim(),
+          badge_number:   badgeCol ? row[badgeCol]?.trim() || null : null,
+          rank_id:        rankCol && row[rankCol] ? (rankMap[row[rankCol].toLowerCase()] || null) : null,
+          hire_date:      hireCol && row[hireCol] ? parseDate(row[hireCol]) : null,
+          email:          emailCol ? row[emailCol]?.trim() || null : null,
+          officer_status: 'active'
+        }));
+
+      if (records.length) {
+        const { error } = await supabase.from('personnel_roster').insert(records);
+        if (!error) imported += records.length;
+        else skipped += records.length;
+      }
+      skipped += batch.length - records.filter(r => r.first_name).length;
+
+      const pct = Math.round(((i + BATCH) / csvRows.length) * 100);
+      document.getElementById('import-bar').style.width = Math.min(pct, 100) + '%';
+      document.getElementById('import-count').textContent =
+        `${imported} imported · ${i + BATCH < csvRows.length ? 'Processing…' : 'Finishing…'}`;
+    }
+
+    // Complete
+    document.getElementById('upload-step-3').style.display = 'none';
+    document.getElementById('upload-step-4').style.display = 'block';
+    document.getElementById('import-complete-msg').textContent = 'Import complete';
+    document.getElementById('import-summary').textContent =
+      `${imported} officers imported successfully${skipped ? ` · ${skipped} rows skipped` : ''}`;
+
+    document.getElementById('upload-footer').innerHTML = `
+      <button class="btn btn-primary" onclick="document.getElementById('upload-modal').classList.remove('open');loadOfficers(0);">
+        View Roster
+      </button>`;
+
+    await loadOfficers(0);
+  };
+
+  function resetUpload() {
+    ['upload-step-1','upload-step-2','upload-step-3','upload-step-4'].forEach((id, i) => {
+      document.getElementById(id).style.display = i === 0 ? 'block' : 'none';
+    });
+    document.getElementById('upload-next-btn').style.display = 'none';
+    document.getElementById('upload-footer').innerHTML = `
+      <button class="btn btn-ghost" onclick="document.getElementById('upload-modal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" id="upload-next-btn" style="display:none;" onclick="runImport()">Import Officers</button>`;
+    document.getElementById('csv-input').value = '';
+    csvRows = []; csvHeaders = [];
+  }
+
+  // Filters
+  ['filter-rank','filter-status'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => loadOfficers(0));
+  });
+  document.getElementById('search-officers').addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => loadOfficers(0), 300);
+  });
+  document.getElementById('clear-filters').addEventListener('click', () => {
+    document.getElementById('search-officers').value = '';
+    document.getElementById('filter-rank').value   = '';
+    document.getElementById('filter-status').value = '';
+    loadOfficers(0);
+  });
+
+  // Helpers
+  function parseDate(str) {
+    if (!str) return null;
+    const d = new Date(str);
+    return isNaN(d) ? null : d.toISOString().split('T')[0];
+  }
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US',
+      { month:'short', day:'numeric', year:'numeric' });
+  }
+
+  function scoreColor(s) {
+    if (s == null) return 'var(--text-muted)';
+    if (s >= 90)  return 'var(--success)';
+    if (s >= 80)  return 'var(--accent)';
+    if (s >= 70)  return 'var(--warning)';
+    return 'var(--danger)';
+  }
+
+  function statusBadge(s) {
+    return { active:'badge-success', inactive:'badge-muted',
+             on_leave:'badge-warning', terminated:'badge-danger' }[s] || 'badge-muted';
+  }
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(type, title, body = '') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}</div>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 4000);
+  }
+
+  await Promise.all([loadRanks(), loadOfficers(0)]);
+</script>
+</body>
+</html>

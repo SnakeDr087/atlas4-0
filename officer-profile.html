@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Officer Profile</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .profile-header {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--border-radius-lg);
+      padding: 24px 28px;
+      display: flex;
+      align-items: flex-start;
+      gap: 28px;
+      margin-bottom: 20px;
+    }
+    .officer-avatar {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: var(--accent-dim); border: 2px solid var(--accent-glow);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-heading); font-size: 22px; font-weight: 700;
+      color: var(--accent); flex-shrink: 0;
+    }
+    .profile-meta { flex: 1; min-width: 0; }
+    .officer-name { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .officer-sub  { font-size: 13px; color: var(--text-secondary); display: flex; gap: 16px; flex-wrap: wrap; }
+    .officer-sub span { display: flex; align-items: center; gap: 5px; }
+    .score-block  { text-align: center; flex-shrink: 0; }
+    .score-label  { font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+                    text-transform: uppercase; color: var(--text-muted); margin-top: 6px; }
+    .score-ring-wrap { position: relative; width: 96px; height: 96px; }
+    .score-ring-wrap svg { transform: rotate(-90deg); }
+    .score-ring-center {
+      position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; flex-direction: column;
+    }
+    .score-num { font-family: var(--font-heading); font-size: 22px; font-weight: 700; line-height: 1; }
+    .score-sub  { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+    .stat-row   { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 20px; }
+    .stat-mini  {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: var(--border-radius-lg); padding: 14px 16px;
+    }
+    .stat-mini-val   { font-family: var(--font-heading); font-size: 22px; font-weight: 700; }
+    .stat-mini-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+                       color: var(--text-muted); margin-top: 4px; font-weight: 500; }
+    .incident-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .incident-bar-label { font-size: 12px; color: var(--text-secondary); width: 170px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .incident-bar-track { flex: 1; height: 6px; background: var(--bg-overlay); border-radius: 3px; overflow: hidden; }
+    .incident-bar-fill  { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s ease; }
+    .incident-bar-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); width: 28px; text-align: right; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div id="loading-state" style="display:flex;align-items:center;justify-content:center;height:300px;">
+        <div class="spinner spinner-lg"></div>
+      </div>
+
+      <div id="not-found" class="empty-state" style="display:none;">
+        <div class="empty-title">Officer not found</div>
+        <div class="empty-text">This officer may not exist or you may not have access.</div>
+        <a href="search.html" class="btn btn-secondary" style="margin-top:16px;">← Search</a>
+      </div>
+
+      <div id="page-content" style="display:none;" class="animate-fade-in">
+
+        <!-- Profile header -->
+        <div class="profile-header">
+          <div class="officer-avatar" id="officer-avatar"></div>
+
+          <div class="profile-meta">
+            <div class="flex items-center gap-2" style="margin-bottom:6px;">
+              <a href="javascript:history.back()" style="font-size:13px;color:var(--text-muted);">←</a>
+              <span style="color:var(--text-muted);font-size:13px;">Officer Profile</span>
+            </div>
+            <div class="officer-name" id="officer-name"></div>
+            <div class="officer-sub" id="officer-sub"></div>
+          </div>
+
+          <div class="score-block">
+            <div class="score-ring-wrap">
+              <svg width="96" height="96" viewBox="0 0 96 96">
+                <circle cx="48" cy="48" r="40" fill="none" stroke="var(--bg-overlay)" stroke-width="8"/>
+                <circle id="score-arc" cx="48" cy="48" r="40" fill="none"
+                        stroke="var(--accent)" stroke-width="8" stroke-linecap="round"
+                        stroke-dasharray="251.3" stroke-dashoffset="251.3"
+                        style="transition: stroke-dashoffset 0.7s ease, stroke 0.3s ease;"/>
+              </svg>
+              <div class="score-ring-center">
+                <div class="score-num" id="score-display">—</div>
+                <div class="score-sub">score</div>
+              </div>
+            </div>
+            <div class="score-label">Performance Score</div>
+          </div>
+        </div>
+
+        <!-- Stat row -->
+        <div class="stat-row">
+          <div class="stat-mini">
+            <div class="stat-mini-val" id="stat-reviews">—</div>
+            <div class="stat-mini-label">Approved Reviews</div>
+          </div>
+          <div class="stat-mini">
+            <div class="stat-mini-val" id="stat-delta-t" style="color:var(--warning);">—</div>
+            <div class="stat-mini-label">Open Delta T</div>
+          </div>
+          <div class="stat-mini">
+            <div class="stat-mini-val" id="stat-ia" style="color:var(--danger);">—</div>
+            <div class="stat-mini-label">Open IA Cases</div>
+          </div>
+          <div class="stat-mini">
+            <div class="stat-mini-val" id="stat-pip" style="color:var(--outcome-pip);">—</div>
+            <div class="stat-mini-label">Active PIPs</div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="reviews">Reviews</button>
+          <button class="tab-btn" data-tab="delta-t">Delta T Cases</button>
+          <button class="tab-btn" data-tab="training">Training</button>
+          <button class="tab-btn" data-tab="breakdown">Score Breakdown</button>
+        </div>
+
+        <!-- Tab: Reviews -->
+        <div class="tab-panel active" id="tab-reviews">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Review History</div>
+              <div style="display:flex;gap:8px;">
+                <select id="reviews-outcome-filter" style="font-size:12px;padding:5px 8px;">
+                  <option value="">All Outcomes</option>
+                  <option value="no_action">No Action</option>
+                  <option value="commendation">Commendation</option>
+                  <option value="coaching">Coaching</option>
+                  <option value="training">Training</option>
+                  <option value="internal_affairs">IA Referral</option>
+                  <option value="pip">PIP</option>
+                </select>
+                <select id="reviews-incident-filter" style="font-size:12px;padding:5px 8px;">
+                  <option value="">All Incident Types</option>
+                </select>
+              </div>
+            </div>
+            <div id="reviews-content">
+              <div style="display:flex;justify-content:center;padding:32px;">
+                <div class="spinner"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Delta T -->
+        <div class="tab-panel" id="tab-delta-t">
+          <div class="card">
+            <div class="card-title" style="margin-bottom:16px;">Intervention Tracking Cases</div>
+            <div id="delta-t-content">
+              <div style="display:flex;justify-content:center;padding:32px;">
+                <div class="spinner"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Training -->
+        <div class="tab-panel" id="tab-training">
+          <div class="card">
+            <div class="card-title" style="margin-bottom:16px;">Training Assignments</div>
+            <div id="training-content">
+              <div style="display:flex;justify-content:center;padding:32px;">
+                <div class="spinner"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Score Breakdown -->
+        <div class="tab-panel" id="tab-breakdown">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="card">
+              <div class="card-title" style="margin-bottom:16px;">Score by Incident Type</div>
+              <div id="breakdown-by-type">
+                <div style="display:flex;justify-content:center;padding:32px;">
+                  <div class="spinner"></div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title" style="margin-bottom:4px;">Outcome Distribution</div>
+              <div class="card-subtitle" style="margin-bottom:16px;">All approved reviews</div>
+              <div id="outcome-distribution"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth, getCurrentProfile } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({ requireAuth: true });
+  renderNav(profile, 'officer-profile');
+
+  const params    = new URLSearchParams(window.location.search);
+  const officerId = params.get('id');
+  if (!officerId) { location.href = 'search.html'; }
+
+  // ── Load officer ───────────────────────────────────────
+  const { data: officer, error } = await supabase
+    .from('personnel_roster')
+    .select(`*, rank:agency_ranks(rank_name, hierarchy_number)`)
+    .eq('id', officerId)
+    .single();
+
+  document.getElementById('loading-state').style.display = 'none';
+
+  if (error || !officer) {
+    document.getElementById('not-found').style.display = 'block';
+    throw new Error('Not found');
+  }
+
+  document.getElementById('page-content').style.display = 'block';
+
+  const fullName = `${officer.last_name}, ${officer.first_name}`;
+  document.title = `ATLAS — ${fullName}`;
+  renderTopbar(fullName);
+
+  // Avatar initials
+  const initials = `${officer.first_name[0]}${officer.last_name[0]}`.toUpperCase();
+  document.getElementById('officer-avatar').textContent = initials;
+  document.getElementById('officer-name').textContent   = fullName;
+
+  // Sub-header metadata
+  const subItems = [
+    officer.rank?.rank_name ? `<span>${officer.rank.rank_name}</span>` : null,
+    officer.badge_number    ? `<span>Badge #${officer.badge_number}</span>` : null,
+    officer.hire_date       ? `<span>${yearsOfService(officer.hire_date)} years of service</span>` : null,
+    `<span class="badge ${officer.officer_status === 'active' ? 'badge-success' : 'badge-muted'}">${officer.officer_status}</span>`
+  ].filter(Boolean);
+  document.getElementById('officer-sub').innerHTML = subItems.join('');
+
+  // ── Score ring ─────────────────────────────────────────
+  function renderScore(score, minThreshold) {
+    const arc   = document.getElementById('score-arc');
+    const disp  = document.getElementById('score-display');
+    const circ  = 251.3; // 2 * π * 40
+
+    if (score === null || score === undefined) {
+      disp.textContent = '—';
+      disp.style.fontSize = '16px';
+      return;
+    }
+
+    const pct    = Math.min(Math.max(score, 0), 100);
+    const offset = circ * (1 - pct / 100);
+    arc.style.strokeDashoffset = offset;
+
+    // Color by score level
+    if (pct >= 90)      arc.style.stroke = 'var(--success)';
+    else if (pct >= 80) arc.style.stroke = 'var(--accent)';
+    else if (pct >= 70) arc.style.stroke = 'var(--warning)';
+    else                arc.style.stroke = 'var(--danger)';
+
+    disp.textContent = Math.round(pct);
+    if (pct >= 90)      disp.style.color = 'var(--success)';
+    else if (pct >= 80) disp.style.color = 'var(--accent)';
+    else if (pct >= 70) disp.style.color = 'var(--warning)';
+    else                disp.style.color = 'var(--danger)';
+  }
+
+  // ── Load stats ─────────────────────────────────────────
+  async function loadStats() {
+    const [reviewsRes, deltaTRes, iaRes, pipRes, agencyRes] = await Promise.all([
+      supabase.from('bwc_reviews').select('id', { count:'exact', head:true })
+        .eq('primary_officer_id', officerId).eq('status','approved').eq('is_ia_referral',false),
+      supabase.from('delta_t_cases').select('id', { count:'exact', head:true })
+        .eq('officer_id', officerId).eq('status','open'),
+      supabase.from('ia_cases').select('id', { count:'exact', head:true })
+        .eq('officer_id', officerId).eq('status','open'),
+      supabase.from('pips').select('id', { count:'exact', head:true })
+        .eq('officer_id', officerId).eq('status','active'),
+      supabase.from('agencies').select('min_review_threshold')
+        .eq('id', officer.agency_id).single()
+    ]);
+
+    const reviewCount = reviewsRes.count ?? 0;
+    const threshold   = agencyRes.data?.min_review_threshold ?? 5;
+
+    document.getElementById('stat-reviews').textContent = reviewCount;
+    document.getElementById('stat-delta-t').textContent = deltaTRes.count ?? 0;
+    document.getElementById('stat-ia').textContent      = iaRes.count ?? 0;
+    document.getElementById('stat-pip').textContent     = pipRes.count ?? 0;
+
+    if (reviewCount < threshold) {
+      document.getElementById('score-display').textContent = '—';
+      document.getElementById('score-display').style.fontSize = '13px';
+      document.querySelector('.score-sub').textContent = `< ${threshold} reviews`;
+    } else {
+      renderScore(officer.performance_score, threshold);
+    }
+  }
+
+  // ── Reviews tab ────────────────────────────────────────
+  async function loadReviews() {
+    const outcome  = document.getElementById('reviews-outcome-filter').value;
+    const typeId   = document.getElementById('reviews-incident-filter').value;
+
+    let q = supabase
+      .from('bwc_reviews')
+      .select(`id, atlas_case_number, review_date, incident_date, follow_up_outcome, status,
+               incident_type:incident_types(name),
+               supervisor:profiles!reviewing_supervisor_id(full_name)`)
+      .eq('primary_officer_id', officerId)
+      .order('incident_date', { ascending: false })
+      .limit(50);
+
+    if (outcome) q = q.eq('follow_up_outcome', outcome);
+    if (typeId)  q = q.eq('incident_type_id', typeId);
+
+    const { data: reviews } = await q;
+    const container = document.getElementById('reviews-content');
+
+    if (!reviews?.length) {
+      container.innerHTML = emptyState('No reviews match the current filters.');
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="table-container">
+        <table class="atlas-table">
+          <thead>
+            <tr>
+              <th>Case #</th><th>Incident Type</th><th>Incident Date</th>
+              <th>Reviewer</th><th>Follow-Up</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${reviews.map(r => `
+              <tr onclick="location.href='review-detail.html?id=${r.id}'" style="cursor:pointer;">
+                <td class="col-mono">${r.atlas_case_number || '—'}</td>
+                <td>${r.incident_type?.name || '—'}</td>
+                <td>${fmtDate(r.incident_date)}</td>
+                <td style="font-size:12px;color:var(--text-muted);">${r.supervisor?.full_name || '—'}</td>
+                <td>${outcomeBadge(r.follow_up_outcome)}</td>
+                <td>${statusBadge(r.status)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  // ── Delta T tab ────────────────────────────────────────
+  async function loadDeltaT() {
+    const { data: cases } = await supabase
+      .from('delta_t_cases')
+      .select(`id, kpi_text_snapshot, t1_incident_date, t2_training_delivered,
+               t4_verification_date, delta_t_total, status, is_overdue_flagged`)
+      .eq('officer_id', officerId)
+      .order('t1_incident_date', { ascending: false });
+
+    const container = document.getElementById('delta-t-content');
+    if (!cases?.length) {
+      container.innerHTML = emptyState('No Delta T cases for this officer.');
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="table-container">
+        <table class="atlas-table">
+          <thead>
+            <tr><th>KPI</th><th>T1 (Incident)</th><th>T2 (Training)</th><th>T4 (Verified)</th><th>Δ Total</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            ${cases.map(c => `
+              <tr onclick="location.href='delta-t.html?id=${c.id}'" style="cursor:pointer;">
+                <td style="max-width:200px;" class="truncate">${escHtml(c.kpi_text_snapshot)}</td>
+                <td>${fmtDate(c.t1_incident_date)}</td>
+                <td>${c.t2_training_delivered ? fmtDate(c.t2_training_delivered) : '<span style="color:var(--text-muted)">Pending</span>'}</td>
+                <td>${c.t4_verification_date  ? fmtDate(c.t4_verification_date)  : '<span style="color:var(--text-muted)">Pending</span>'}</td>
+                <td class="mono" style="color:var(--accent);">${c.delta_t_total != null ? c.delta_t_total + 'd' : '—'}</td>
+                <td>
+                  ${c.is_overdue_flagged
+                    ? '<span class="badge badge-danger">⚠ Flagged</span>'
+                    : c.status === 'closed'
+                      ? '<span class="badge badge-success">Closed</span>'
+                      : '<span class="badge badge-warning">Open</span>'}
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  // ── Training tab ───────────────────────────────────────
+  async function loadTraining() {
+    const { data: assignments } = await supabase
+      .from('training_assignments')
+      .select(`id, training_name, training_type, provider, date_ordered, deadline,
+               date_delivered, completion_status`)
+      .eq('officer_id', officerId)
+      .order('date_ordered', { ascending: false });
+
+    const container = document.getElementById('training-content');
+    if (!assignments?.length) {
+      container.innerHTML = emptyState('No training assignments for this officer.');
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="table-container">
+        <table class="atlas-table">
+          <thead>
+            <tr><th>Training</th><th>Type</th><th>Ordered</th><th>Deadline</th><th>Delivered</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            ${assignments.map(a => `
+              <tr>
+                <td class="col-primary">${escHtml(a.training_name)}</td>
+                <td style="font-size:12px;color:var(--text-secondary);">${a.training_type?.replace(/_/g,' ') || '—'}</td>
+                <td>${fmtDate(a.date_ordered)}</td>
+                <td style="color:${isOverdue(a) ? 'var(--danger)' : 'inherit'};">${fmtDate(a.deadline)}</td>
+                <td>${a.date_delivered ? fmtDate(a.date_delivered) : '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td>${trainingBadge(a.completion_status)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  // ── Score breakdown tab ────────────────────────────────
+  async function loadBreakdown() {
+    const { data: reviews } = await supabase
+      .from('bwc_reviews')
+      .select('follow_up_outcome, incident_type:incident_types(name)')
+      .eq('primary_officer_id', officerId)
+      .eq('status', 'approved')
+      .eq('is_ia_referral', false);
+
+    if (!reviews?.length) {
+      document.getElementById('breakdown-by-type').innerHTML = emptyState('No approved reviews yet.');
+      document.getElementById('outcome-distribution').innerHTML = emptyState('No data yet.');
+      return;
+    }
+
+    // Score by incident type
+    const byType = {};
+    reviews.forEach(r => {
+      const name = r.incident_type?.name || 'Unknown';
+      if (!byType[name]) byType[name] = { pos: 0, total: 0 };
+      byType[name].total++;
+      if (['no_action','commendation'].includes(r.follow_up_outcome)) byType[name].pos++;
+    });
+
+    const typeEntries = Object.entries(byType).sort((a,b) => b[1].total - a[1].total);
+    const maxCount    = Math.max(...typeEntries.map(([,v]) => v.total));
+
+    document.getElementById('breakdown-by-type').innerHTML = typeEntries.map(([name, v]) => {
+      const score = Math.round((v.pos / v.total) * 100);
+      const color = score >= 90 ? 'var(--success)' : score >= 80 ? 'var(--accent)' : score >= 70 ? 'var(--warning)' : 'var(--danger)';
+      return `
+        <div class="incident-bar-row">
+          <div class="incident-bar-label" title="${escHtml(name)}">${escHtml(name)}</div>
+          <div class="incident-bar-track">
+            <div class="incident-bar-fill" style="width:${(v.total/maxCount)*100}%;background:${color};"></div>
+          </div>
+          <div class="incident-bar-count" style="color:${color};">${score}%</div>
+        </div>`;
+    }).join('');
+
+    // Outcome distribution
+    const outcomeCounts = {};
+    const outcomeOrder  = ['no_action','commendation','coaching','training','internal_affairs','pip'];
+    const outcomeLabels = {
+      no_action:'No Action', commendation:'Commendation', coaching:'Coaching',
+      training:'Training', internal_affairs:'IA Referral', pip:'PIP'
+    };
+    reviews.forEach(r => {
+      if (r.follow_up_outcome) {
+        outcomeCounts[r.follow_up_outcome] = (outcomeCounts[r.follow_up_outcome] || 0) + 1;
+      }
+    });
+
+    const total = reviews.length;
+    document.getElementById('outcome-distribution').innerHTML = outcomeOrder
+      .filter(o => outcomeCounts[o])
+      .map(o => {
+        const count = outcomeCounts[o];
+        const pct   = Math.round((count / total) * 100);
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;
+               margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+              ${outcomeBadge(o)}
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:80px;height:5px;background:var(--bg-overlay);border-radius:3px;overflow:hidden;">
+                <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:3px;"></div>
+              </div>
+              <span class="mono" style="font-size:11px;color:var(--text-muted);width:28px;text-align:right;">${count}</span>
+            </div>
+          </div>`;
+      }).join('') || emptyState('No outcome data.');
+  }
+
+  // ── Tab switching ──────────────────────────────────────
+  let tabsLoaded = { reviews: false, 'delta-t': false, training: false, breakdown: false };
+
+  async function activateTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.tab === tabName));
+    document.querySelectorAll('.tab-panel').forEach(p =>
+      p.classList.toggle('active', p.id === `tab-${tabName}`));
+
+    if (!tabsLoaded[tabName]) {
+      tabsLoaded[tabName] = true;
+      if (tabName === 'reviews')   await loadReviews();
+      if (tabName === 'delta-t')   await loadDeltaT();
+      if (tabName === 'training')  await loadTraining();
+      if (tabName === 'breakdown') await loadBreakdown();
+    }
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+  });
+
+  // Filter listeners
+  document.getElementById('reviews-outcome-filter').addEventListener('change', () => {
+    tabsLoaded.reviews = false; loadReviews();
+  });
+
+  // ── Load incident types for filter ────────────────────
+  const { data: incidentTypes } = await supabase
+    .from('incident_types').select('id, name')
+    .or(`agency_id.eq.${officer.agency_id},is_global_default.eq.true`)
+    .eq('is_active', true).order('display_order');
+
+  const sel = document.getElementById('reviews-incident-filter');
+  (incidentTypes || []).forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id; opt.textContent = t.name;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', () => { tabsLoaded.reviews = false; loadReviews(); });
+
+  // ── Helpers ────────────────────────────────────────────
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function yearsOfService(hireDate) {
+    const ms   = Date.now() - new Date(hireDate);
+    return Math.floor(ms / (1000 * 60 * 60 * 24 * 365.25));
+  }
+
+  function isOverdue(a) {
+    return !a.date_delivered && a.deadline && new Date(a.deadline) < new Date();
+  }
+
+  function emptyState(msg) {
+    return `<div class="empty-state"><div class="empty-text">${msg}</div></div>`;
+  }
+
+  function outcomeBadge(o) {
+    const m = { no_action:['No Action','badge-no-action'], commendation:['Commendation','badge-commendation'],
+      coaching:['Coaching','badge-coaching'], training:['Training','badge-training'],
+      internal_affairs:['IA Referral','badge-ia'], pip:['PIP','badge-pip'] };
+    const [l, c] = m[o] || [o,'badge-muted'];
+    return `<span class="badge ${c}">${l}</span>`;
+  }
+
+  function statusBadge(s) {
+    const m = { draft:'badge-draft', pending_approval:'badge-pending',
+                approved:'badge-approved', rejected:'badge-rejected' };
+    const l = s ? s.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase()) : '—';
+    return `<span class="badge ${m[s]||'badge-muted'}">${l}</span>`;
+  }
+
+  function trainingBadge(s) {
+    const m = { assigned:'badge-muted', in_progress:'badge-accent', completed:'badge-success',
+                overdue:'badge-danger', waived:'badge-muted' };
+    const l = s ? s.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase()) : '—';
+    return `<span class="badge ${m[s]||'badge-muted'}">${l}</span>`;
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Init ──────────────────────────────────────────────
+  await loadStats();
+  await activateTab('reviews');
+  tabsLoaded.reviews = true;
+</script>
+</body>
+</html>

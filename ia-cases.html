@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — IA Cases</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Internal Affairs Cases</h1>
+          <p>Restricted. Visible to Chief, IA, Training Bureau, and named individuals only.</p>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="filters-bar">
+          <select id="filter-status" style="max-width:180px;">
+            <option value="">All Statuses</option>
+            <option value="open">Open</option>
+            <option value="under_review">Under Review</option>
+            <option value="closed">Closed</option>
+            <option value="unfounded">Unfounded</option>
+          </select>
+          <input type="date" id="filter-from" title="From date" style="max-width:145px;">
+          <input type="date" id="filter-to"   title="To date"   style="max-width:145px;">
+          <button class="btn btn-ghost btn-sm" id="clear-filters">Clear</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="table-loading" style="display:flex;align-items:center;justify-content:center;padding:48px;">
+          <div class="spinner"></div>
+        </div>
+
+        <div id="table-content" style="display:none;">
+          <div class="table-container">
+            <table class="atlas-table">
+              <thead>
+                <tr>
+                  <th>IA Case #</th>
+                  <th>Officer</th>
+                  <th>Submitted By</th>
+                  <th>Opened</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="ia-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="pagination">
+            <span id="pagination-info" style="color:var(--text-muted);font-size:12px;"></span>
+            <div class="pagination-controls" id="pagination-controls"></div>
+          </div>
+        </div>
+
+        <div id="empty-state" class="empty-state" style="display:none;">
+          <div class="empty-title">No IA cases found</div>
+          <div class="empty-text">IA cases open when a review is submitted with outcome = Internal Affairs.</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const PAGE_SIZE = 25;
+  let currentPage = 0;
+  let totalCount  = 0;
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin','chief','internal_affairs','training_bureau']
+  });
+  renderNav(profile, 'ia-cases');
+  renderTopbar('IA Cases');
+
+  async function loadCases(page = 0) {
+    currentPage = page;
+    document.getElementById('table-loading').style.display = 'flex';
+    document.getElementById('table-content').style.display = 'none';
+    document.getElementById('empty-state').style.display   = 'none';
+
+    const status  = document.getElementById('filter-status').value;
+    const dateFrom = document.getElementById('filter-from').value;
+    const dateTo   = document.getElementById('filter-to').value;
+    const from = page * PAGE_SIZE;
+    const to   = from + PAGE_SIZE - 1;
+
+    let q = supabase
+      .from('ia_cases')
+      .select(`
+        id, case_number, status, created_at,
+        officer:personnel_roster(first_name, last_name, badge_number),
+        supervisor:profiles!submitting_supervisor_id(full_name)
+      `)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (profile.agency_id) q = q.eq('agency_id', profile.agency_id);
+    if (status)   q = q.eq('status', status);
+    if (dateFrom) q = q.gte('created_at', dateFrom);
+    if (dateTo)   q = q.lte('created_at', dateTo + 'T23:59:59');
+
+    const { data: cases, error, count } = await q;
+    totalCount = count ?? 0;
+
+    document.getElementById('table-loading').style.display = 'none';
+    if (error || !cases?.length) {
+      document.getElementById('empty-state').style.display = 'block';
+      return;
+    }
+
+    const tbody = document.getElementById('ia-tbody');
+    tbody.innerHTML = cases.map(c => `
+      <tr onclick="location.href='ia-case-detail.html?id=${c.id}'" style="cursor:pointer;">
+        <td class="col-mono">${c.case_number || '—'}</td>
+        <td class="col-primary">
+          ${c.officer ? `${c.officer.last_name}, ${c.officer.first_name}` : '—'}
+        </td>
+        <td>${c.supervisor?.full_name || '—'}</td>
+        <td>${fmtDate(c.created_at)}</td>
+        <td>${iaBadge(c.status)}</td>
+        <td>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               style="width:14px;height:14px;color:var(--text-muted);">
+            <polyline points="9,18 15,12 9,6"/>
+          </svg>
+        </td>
+      </tr>
+    `).join('');
+
+    document.getElementById('table-content').style.display = 'block';
+    renderPagination();
+  }
+
+  function renderPagination() {
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+    const from = currentPage * PAGE_SIZE + 1;
+    const to   = Math.min((currentPage + 1) * PAGE_SIZE, totalCount);
+    document.getElementById('pagination-info').textContent = `${from}–${to} of ${totalCount}`;
+
+    const controls = document.getElementById('pagination-controls');
+    controls.innerHTML = '';
+
+    const prev = document.createElement('button');
+    prev.className = 'page-btn'; prev.textContent = '←';
+    prev.disabled = currentPage === 0;
+    prev.onclick = () => loadCases(currentPage - 1);
+    controls.appendChild(prev);
+
+    const next = document.createElement('button');
+    next.className = 'page-btn'; next.textContent = '→';
+    next.disabled = currentPage >= totalPages - 1;
+    next.onclick = () => loadCases(currentPage + 1);
+    controls.appendChild(next);
+  }
+
+  ['filter-status','filter-from','filter-to'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => loadCases(0));
+  });
+  document.getElementById('clear-filters').addEventListener('click', () => {
+    ['filter-status','filter-from','filter-to'].forEach(id =>
+      { document.getElementById(id).value = ''; });
+    loadCases(0);
+  });
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str).toLocaleDateString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function iaBadge(s) {
+    const m = { open:'badge-danger', under_review:'badge-warning',
+                closed:'badge-muted', unfounded:'badge-muted' };
+    const l = s ? s.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase()) : '—';
+    return `<span class="badge ${m[s]||'badge-muted'}">${l}</span>`;
+  }
+
+  await loadCases(0);
+</script>
+</body>
+</html>

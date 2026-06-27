@@ -1,0 +1,107 @@
+/* ============================================================
+   ATLAS Performance Management System
+   print.css — Print + PDF Export Stylesheet
+   Link on any page that needs printable output:
+   <link rel="stylesheet" href="print.css" media="print">
+   ============================================================ */
+
+@media print {
+  /* ── Hide app chrome ─────────────────────────────────── */
+  .sidebar, .topbar, .page-content > .page-header .btn,
+  .btn, .filters-bar, .pagination, .tabs, .tab-btn,
+  #toast-container, .form-actions, .form-group button,
+  [data-no-print], .sidebar-footer, nav { display: none !important; }
+
+  /* ── Reset layout ────────────────────────────────────── */
+  body { background: white !important; color: #111 !important;
+         font-family: 'IBM Plex Sans', Arial, sans-serif !important; font-size: 11pt; }
+  .app-layout { display: block !important; }
+  .main-content { margin-left: 0 !important; }
+  .page-content { padding: 0 !important; }
+
+  /* ── Print header ────────────────────────────────────── */
+  .print-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12pt;
+    border-bottom: 2pt solid #111;
+    margin-bottom: 16pt;
+  }
+  .print-logo { font-size: 18pt; font-weight: 900; letter-spacing: 0.08em; }
+  .print-meta { font-size: 9pt; color: #555; text-align: right; }
+  .print-confidential {
+    font-size: 8pt; letter-spacing: 0.15em; text-transform: uppercase;
+    color: #888; text-align: center; margin-bottom: 12pt;
+    border: 1pt solid #ccc; padding: 4pt;
+  }
+
+  /* ── Report title ────────────────────────────────────── */
+  .report-title { font-size: 16pt; font-weight: 700; margin-bottom: 4pt; }
+  .report-subtitle { font-size: 10pt; color: #555; margin-bottom: 16pt; }
+
+  /* ── Cards become plain blocks ───────────────────────── */
+  .card {
+    background: white !important; border: 1pt solid #ccc !important;
+    border-radius: 0 !important; padding: 10pt !important;
+    margin-bottom: 12pt !important; break-inside: avoid;
+  }
+
+  /* ── Tables ──────────────────────────────────────────── */
+  .atlas-table { font-size: 9pt; }
+  .atlas-table th {
+    background: #f0f0f0 !important; color: #333 !important;
+    border-bottom: 1pt solid #ccc !important;
+    padding: 5pt 8pt !important;
+  }
+  .atlas-table td {
+    padding: 5pt 8pt !important;
+    border-bottom: 0.5pt solid #eee !important;
+    color: #222 !important;
+  }
+  .atlas-table tr:last-child td { border-bottom: none !important; }
+
+  /* ── Badges — print as text ──────────────────────────── */
+  .badge {
+    background: none !important; border: 0.5pt solid #ccc !important;
+    color: #333 !important; font-size: 8pt !important; padding: 1pt 4pt !important;
+  }
+
+  /* ── Score ring — hide SVG, show number ─────────────── */
+  .score-ring-wrap svg { display: none !important; }
+
+  /* ── Page breaks ─────────────────────────────────────── */
+  .page-break-before { page-break-before: always; }
+  .page-break-after  { page-break-after:  always; }
+  .no-break          { break-inside: avoid; }
+
+  /* ── Detail rows ─────────────────────────────────────── */
+  .detail-row { font-size: 10pt; }
+  .detail-label { color: #666 !important; }
+  .detail-value { color: #111 !important; }
+
+  /* ── Notes body ──────────────────────────────────────── */
+  .notes-body {
+    font-size: 10pt; color: #222 !important;
+    background: none !important; border: none !important;
+    white-space: pre-wrap;
+  }
+
+  /* ── Internal notes: NEVER print ────────────────────── */
+  #internal-notes-card { display: none !important; }
+
+  /* ── KPI results ─────────────────────────────────────── */
+  .kpi-result-row { font-size: 9pt; }
+  .kpi-result-text { color: #333 !important; }
+
+  /* ── Footer ──────────────────────────────────────────── */
+  .print-footer {
+    display: block !important;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    font-size: 8pt; color: #888; text-align: center;
+    padding: 4pt 0; border-top: 0.5pt solid #ccc;
+  }
+}
+
+/* Print header/footer hidden on screen */
+.print-header, .print-footer, .print-confidential { display: none; }

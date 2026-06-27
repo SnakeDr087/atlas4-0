@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Delta T</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Delta T — Intervention Tracking</h1>
+          <p id="page-summary">Loading…</p>
+        </div>
+      </div>
+
+      <!-- Summary stat strip -->
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;" id="delta-t-stats">
+        <div class="stat-card warning">
+          <div class="stat-icon warning">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+          <div class="stat-value" id="stat-open">—</div>
+          <div class="stat-label">Open Cases</div>
+        </div>
+        <div class="stat-card danger">
+          <div class="stat-icon danger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div class="stat-value" id="stat-flagged">—</div>
+          <div class="stat-label">Flagged (90+ Days)</div>
+        </div>
+        <div class="stat-card accent">
+          <div class="stat-icon accent">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="20,6 9,17 4,12"/></svg>
+          </div>
+          <div class="stat-value" id="stat-closed">—</div>
+          <div class="stat-label">Closed (Verified)</div>
+        </div>
+        <div class="stat-card success">
+          <div class="stat-icon success">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>
+          </div>
+          <div class="stat-value" id="stat-avg-delta">—</div>
+          <div class="stat-label">Avg Δ Days (Closed)</div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="card mb-4">
+        <div class="filters-bar">
+          <div class="search-input-wrap" style="max-width:260px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="filter-search" placeholder="Officer name or KPI…">
+          </div>
+          <select id="filter-status" style="max-width:160px;">
+            <option value="">All Statuses</option>
+            <option value="open">Open</option>
+            <option value="flagged">Flagged (90+ days)</option>
+            <option value="closed">Closed</option>
+          </select>
+          <input type="date" id="filter-from" title="T1 from" style="max-width:145px;">
+          <input type="date" id="filter-to"   title="T1 to"   style="max-width:145px;">
+          <button class="btn btn-ghost btn-sm" id="clear-filters">Clear</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="card">
+        <div id="table-loading" style="display:flex;align-items:center;justify-content:center;padding:48px;">
+          <div class="spinner"></div>
+        </div>
+        <div id="table-content" style="display:none;">
+          <div class="table-container">
+            <table class="atlas-table">
+              <thead>
+                <tr>
+                  <th>Officer</th>
+                  <th>KPI</th>
+                  <th>T1 — Incident</th>
+                  <th>T2 — Training</th>
+                  <th>T4 — Verified</th>
+                  <th>Δ Days</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="delta-t-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination">
+            <span id="pagination-info" style="color:var(--text-muted);font-size:12px;"></span>
+            <div class="pagination-controls" id="pagination-controls"></div>
+          </div>
+        </div>
+        <div id="empty-state" class="empty-state" style="display:none;">
+          <div class="empty-title">No Delta T cases found</div>
+          <div class="empty-text">Cases open automatically when a review is submitted with outcome = Training.</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const PAGE_SIZE = 25;
+  let currentPage = 0;
+  let totalCount  = 0;
+  let debounce;
+
+  const { profile } = await initAuth({ requireAuth: true });
+  renderNav(profile, 'delta-t');
+  renderTopbar('Delta T');
+
+  // Pre-select filter from query param (e.g. ?filter=flagged from dashboard alert)
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('filter') === 'flagged') {
+    document.getElementById('filter-status').value = 'flagged';
+  }
+  // Direct link to a specific case
+  if (params.get('id')) {
+    location.href = `delta-t-detail.html?id=${params.get('id')}`;
+  }
+
+  // ── Summary stats ──────────────────────────────────────
+  async function loadStats() {
+    let baseQ = supabase.from('delta_t_cases');
+    if (profile.agency_id)       baseQ = supabase.from('delta_t_cases').select('status, delta_t_total, t1_incident_date');
+
+    let q = supabase.from('delta_t_cases').select('status, delta_t_total');
+    if (profile.agency_id) q = q.eq('agency_id', profile.agency_id);
+    if (profile.role === 'supervisor') q = q.eq('supervisor_id', profile.id);
+
+    const { data: all } = await q;
+    if (!all) return;
+
+    const open    = all.filter(c => c.status === 'open').length;
+    const flagged = all.filter(c => c.status === 'flagged').length;
+    const closed  = all.filter(c => c.status === 'closed').length;
+    const closedWithDelta = all.filter(c => c.status === 'closed' && c.delta_t_total != null);
+    const avgDelta = closedWithDelta.length
+      ? Math.round(closedWithDelta.reduce((sum, c) => sum + c.delta_t_total, 0) / closedWithDelta.length)
+      : null;
+
+    document.getElementById('stat-open').textContent    = open + flagged;
+    document.getElementById('stat-flagged').textContent = flagged;
+    document.getElementById('stat-closed').textContent  = closed;
+    document.getElementById('stat-avg-delta').textContent = avgDelta != null ? `${avgDelta}d` : '—';
+    document.getElementById('page-summary').textContent =
+      `${open + flagged} open · ${flagged} flagged past 90 days`;
+  }
+
+  // ── Case list ──────────────────────────────────────────
+  async function loadCases(page = 0) {
+    currentPage = page;
+    document.getElementById('table-loading').style.display = 'flex';
+    document.getElementById('table-content').style.display = 'none';
+    document.getElementById('empty-state').style.display   = 'none';
+
+    const search   = document.getElementById('filter-search').value.trim();
+    const status   = document.getElementById('filter-status').value;
+    const dateFrom = document.getElementById('filter-from').value;
+    const dateTo   = document.getElementById('filter-to').value;
+    const from = page * PAGE_SIZE;
+    const to   = from + PAGE_SIZE - 1;
+
+    let q = supabase
+      .from('delta_t_cases')
+      .select(`
+        id, kpi_text_snapshot, t1_incident_date, t2_training_delivered,
+        t4_verification_date, delta_t_total, t1_to_t2_days, t2_to_t4_days,
+        status, is_overdue_flagged,
+        officer:personnel_roster(first_name, last_name, badge_number)
+      `)
+      .order('is_overdue_flagged', { ascending: false })
+      .order('t1_incident_date',   { ascending: true })
+      .range(from, to);
+
+    if (profile.agency_id) q = q.eq('agency_id', profile.agency_id);
+    if (profile.role === 'supervisor') q = q.eq('supervisor_id', profile.id);
+    if (status)   q = q.eq('status', status);
+    if (dateFrom) q = q.gte('t1_incident_date', dateFrom);
+    if (dateTo)   q = q.lte('t1_incident_date', dateTo);
+
+    const { data: cases, error } = await q;
+
+    // Count
+    let cq = supabase.from('delta_t_cases').select('id', { count:'exact', head:true });
+    if (profile.agency_id) cq = cq.eq('agency_id', profile.agency_id);
+    if (profile.role === 'supervisor') cq = cq.eq('supervisor_id', profile.id);
+    if (status) cq = cq.eq('status', status);
+    const { count } = await cq;
+    totalCount = count ?? 0;
+
+    document.getElementById('table-loading').style.display = 'none';
+
+    if (error || !cases?.length) {
+      document.getElementById('empty-state').style.display = 'block';
+      return;
+    }
+
+    // Client-side search filter (KPI text or officer name)
+    let filtered = cases;
+    if (search) {
+      const term = search.toLowerCase();
+      filtered = cases.filter(c =>
+        c.kpi_text_snapshot?.toLowerCase().includes(term) ||
+        c.officer?.last_name?.toLowerCase().includes(term) ||
+        c.officer?.first_name?.toLowerCase().includes(term)
+      );
+    }
+
+    if (!filtered.length) {
+      document.getElementById('empty-state').style.display = 'block';
+      return;
+    }
+
+    const tbody = document.getElementById('delta-t-tbody');
+    tbody.innerHTML = filtered.map(c => {
+      const officer = c.officer ? `${c.officer.last_name}, ${c.officer.first_name}` : '—';
+      const daysOpen = c.status !== 'closed'
+        ? Math.floor((Date.now() - new Date(c.t1_incident_date)) / 86400000)
+        : null;
+
+      return `
+        <tr onclick="location.href='delta-t-detail.html?id=${c.id}'" style="cursor:pointer;">
+          <td class="col-primary">
+            ${escHtml(officer)}
+            ${c.officer?.badge_number
+              ? `<span style="font-size:11px;color:var(--text-muted);margin-left:4px;">#${c.officer.badge_number}</span>`
+              : ''}
+          </td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+              title="${escHtml(c.kpi_text_snapshot)}">${escHtml(c.kpi_text_snapshot)}</td>
+          <td>${fmtDate(c.t1_incident_date)}</td>
+          <td>${c.t2_training_delivered
+            ? `${fmtDate(c.t2_training_delivered)}<span class="mono" style="font-size:10px;color:var(--text-muted);margin-left:4px;">${c.t1_to_t2_days}d</span>`
+            : '<span style="color:var(--text-muted);font-size:12px;">Pending</span>'}</td>
+          <td>${c.t4_verification_date
+            ? `${fmtDate(c.t4_verification_date)}<span class="mono" style="font-size:10px;color:var(--text-muted);margin-left:4px;">${c.t2_to_t4_days != null ? c.t2_to_t4_days + 'd' : ''}</span>`
+            : '<span style="color:var(--text-muted);font-size:12px;">Pending</span>'}</td>
+          <td class="mono" style="color:var(--accent);">
+            ${c.delta_t_total != null ? c.delta_t_total + 'd' : daysOpen != null ? `${daysOpen}d…` : '—'}
+          </td>
+          <td>${statusBadge(c.status, c.is_overdue_flagged)}</td>
+        </tr>`;
+    }).join('');
+
+    renderPagination();
+    document.getElementById('table-content').style.display = 'block';
+  }
+
+  function renderPagination() {
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+    const from = currentPage * PAGE_SIZE + 1;
+    const to   = Math.min((currentPage + 1) * PAGE_SIZE, totalCount);
+    document.getElementById('pagination-info').textContent = `${from}–${to} of ${totalCount}`;
+
+    const ctrl = document.getElementById('pagination-controls');
+    ctrl.innerHTML = '';
+
+    const prev = document.createElement('button');
+    prev.className = 'page-btn'; prev.textContent = '←';
+    prev.disabled = currentPage === 0;
+    prev.onclick = () => loadCases(currentPage - 1);
+    ctrl.appendChild(prev);
+
+    const next = document.createElement('button');
+    next.className = 'page-btn'; next.textContent = '→';
+    next.disabled = currentPage >= totalPages - 1;
+    next.onclick = () => loadCases(currentPage + 1);
+    ctrl.appendChild(next);
+  }
+
+  // Filter listeners
+  ['filter-status','filter-from','filter-to'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => loadCases(0));
+  });
+  document.getElementById('filter-search').addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => loadCases(0), 300);
+  });
+  document.getElementById('clear-filters').addEventListener('click', () => {
+    document.getElementById('filter-search').value = '';
+    document.getElementById('filter-status').value = '';
+    document.getElementById('filter-from').value   = '';
+    document.getElementById('filter-to').value     = '';
+    loadCases(0);
+  });
+
+  function statusBadge(status, flagged) {
+    if (flagged) return '<span class="badge badge-danger">⚠ Flagged</span>';
+    const m = { open:'badge-warning', flagged:'badge-danger', closed:'badge-success' };
+    const l = status ? status.charAt(0).toUpperCase() + status.slice(1) : '—';
+    return `<span class="badge ${m[status]||'badge-muted'}">${l}</span>`;
+  }
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  await Promise.all([loadStats(), loadCases(0)]);
+</script>
+</body>
+</html>

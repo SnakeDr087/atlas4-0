@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Delta T Case</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Delta T timeline component ─────────────────────── */
+    .dt-timeline {
+      display: flex; align-items: center; padding: 24px 0 8px; gap: 0;
+    }
+    .dt-point { display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; }
+    .dt-dot {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: var(--bg-elevated); border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+      color: var(--text-muted); position: relative; z-index: 1;
+    }
+    .dt-dot.set    { background: var(--accent-dim);  border-color: var(--accent);  color: var(--accent); }
+    .dt-dot.closed { background: var(--success-dim); border-color: var(--success); color: var(--success); }
+    .dt-dot.flag   { background: var(--danger-dim);  border-color: var(--danger);  color: var(--danger); }
+    .dt-point-name { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--text-muted); text-align: center; white-space: nowrap; }
+    .dt-point-date { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); text-align: center; white-space: nowrap; }
+    .dt-segment {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      position: relative;
+    }
+    .dt-line {
+      width: 100%; height: 2px; background: var(--border); position: relative;
+    }
+    .dt-line.set    { background: var(--accent); }
+    .dt-line.closed { background: var(--success); }
+    .dt-interval {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--text-muted); margin-top: 8px; white-space: nowrap;
+    }
+    .dt-interval.set    { color: var(--accent); }
+    .dt-interval.closed { color: var(--success); }
+
+    /* ── Training form ───────────────────────────────────── */
+    .training-status-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 0; border-bottom: 1px solid var(--border-subtle);
+    }
+    .training-status-row:last-child { border-bottom: none; }
+    .training-key   { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+    .training-val   { font-size: 13px; color: var(--text-primary); }
+
+    /* ── KPI spotlight ───────────────────────────────────── */
+    .kpi-spotlight {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--border-radius); padding: 14px 16px;
+      font-size: 14px; color: var(--text-primary); line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .kpi-spotlight-label {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div id="loading-state" style="display:flex;align-items:center;justify-content:center;height:300px;">
+        <div class="spinner spinner-lg"></div>
+      </div>
+      <div id="not-found" class="empty-state" style="display:none;">
+        <div class="empty-title">Case not found</div>
+        <a href="delta-t.html" class="btn btn-secondary" style="margin-top:16px;">← Delta T</a>
+      </div>
+
+      <div id="page-content" style="display:none;" class="animate-fade-in">
+
+        <!-- Page header -->
+        <div class="flex items-center justify-between" style="margin-bottom:24px;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <a href="delta-t.html" style="font-size:13px;color:var(--text-muted);">Delta T</a>
+              <span style="color:var(--text-muted);">/</span>
+              <span id="case-officer" style="font-size:13px;color:var(--text-secondary);"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <h1 id="page-title" style="font-size:22px;"></h1>
+              <span id="case-status-badge"></span>
+            </div>
+          </div>
+          <a href="delta-t.html" class="btn btn-ghost">← Delta T</a>
+        </div>
+
+        <!-- Flagged warning -->
+        <div id="flagged-banner" class="alert alert-danger" style="display:none;margin-bottom:20px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0;">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span class="alert-message">This case has been open for <strong id="days-open-count"></strong> days — past the 90-day threshold. Immediate action required.</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start;">
+
+          <!-- Main column -->
+          <div>
+
+            <!-- Timeline card -->
+            <div class="card" style="margin-bottom:20px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;
+                   color:var(--text-muted);margin-bottom:0;padding-bottom:0;">
+                Intervention Timeline
+              </div>
+
+              <div class="dt-timeline">
+                <!-- T1 -->
+                <div class="dt-point">
+                  <div class="dt-dot set" id="dot-t1">T1</div>
+                  <div class="dt-point-name">Incident</div>
+                  <div class="dt-point-date" id="label-t1">—</div>
+                </div>
+
+                <!-- T1 → T2 segment -->
+                <div class="dt-segment">
+                  <div class="dt-line" id="line-t1t2"></div>
+                  <div class="dt-interval" id="interval-t1t2">—</div>
+                </div>
+
+                <!-- T2 -->
+                <div class="dt-point">
+                  <div class="dt-dot" id="dot-t2">T2</div>
+                  <div class="dt-point-name">Training</div>
+                  <div class="dt-point-date" id="label-t2">Pending</div>
+                </div>
+
+                <!-- T2 → T4 segment -->
+                <div class="dt-segment">
+                  <div class="dt-line" id="line-t2t4"></div>
+                  <div class="dt-interval" id="interval-t2t4">—</div>
+                </div>
+
+                <!-- T4 -->
+                <div class="dt-point">
+                  <div class="dt-dot" id="dot-t4">T4</div>
+                  <div class="dt-point-name">Verified</div>
+                  <div class="dt-point-date" id="label-t4">Pending</div>
+                </div>
+              </div>
+
+              <!-- Delta T total -->
+              <div id="delta-total-row" style="margin-top:16px;padding-top:16px;
+                   border-top:1px solid var(--border-subtle);display:flex;
+                   align-items:center;justify-content:space-between;">
+                <span style="font-size:13px;color:var(--text-secondary);">
+                  Total Delta T (T4 − T1)
+                </span>
+                <span id="delta-total-val" class="mono" style="font-size:20px;font-weight:700;color:var(--accent);">—</span>
+              </div>
+            </div>
+
+            <!-- KPI spotlight -->
+            <div id="kpi-section" style="margin-bottom:20px;">
+              <div class="kpi-spotlight-label">KPI Under Intervention</div>
+              <div class="kpi-spotlight" id="kpi-text"></div>
+              <div style="display:flex;gap:10px;">
+                <a id="source-review-link" href="#" class="btn btn-ghost btn-sm">
+                  View Source Review →
+                </a>
+              </div>
+            </div>
+
+            <!-- Training assignment -->
+            <div class="card" id="training-section">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                <div>
+                  <div class="card-title">Training Assignment</div>
+                  <div class="card-subtitle">Setting Date Delivered auto-populates T2</div>
+                </div>
+                <span id="training-status-badge"></span>
+              </div>
+
+              <!-- No training yet — show create form -->
+              <div id="training-create-form">
+                <div class="alert alert-info" style="margin-bottom:16px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span class="alert-message">No training assignment yet. Create one below to start the clock on T2.</span>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Training Name <span class="required">*</span></label>
+                    <input type="text" id="t-name" placeholder="e.g. Use of Force De-escalation">
+                  </div>
+                  <div class="form-group">
+                    <label>Training Type <span class="required">*</span></label>
+                    <select id="t-type">
+                      <option value="">— Select —</option>
+                      <option value="classroom">Classroom</option>
+                      <option value="field">Field</option>
+                      <option value="online">Online</option>
+                      <option value="ride_along">Ride-Along</option>
+                      <option value="policy_review">Policy Review</option>
+                      <option value="video_review">Video Review</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Provider</label>
+                    <select id="t-provider" onchange="toggleProviderName()">
+                      <option value="internal">Internal</option>
+                      <option value="academy">Academy</option>
+                      <option value="external">External Vendor</option>
+                    </select>
+                  </div>
+                  <div class="form-group" id="t-provider-name-group" style="display:none;">
+                    <label>Vendor Name</label>
+                    <input type="text" id="t-provider-name" placeholder="Vendor or organization name">
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Instructor</label>
+                    <input type="text" id="t-instructor" placeholder="Optional">
+                  </div>
+                  <div class="form-group">
+                    <label>Date Scheduled</label>
+                    <input type="date" id="t-scheduled">
+                  </div>
+                </div>
+
+                <div class="form-group" style="max-width:200px;">
+                  <label>Deadline
+                    <span style="font-size:11px;color:var(--text-muted);">— defaults to today + 30 days</span>
+                  </label>
+                  <input type="date" id="t-deadline">
+                </div>
+
+                <button class="btn btn-primary" id="create-training-btn">
+                  Create Training Assignment
+                </button>
+              </div>
+
+              <!-- Existing training assignment -->
+              <div id="training-display" style="display:none;">
+                <div id="training-fields"></div>
+
+                <!-- Deliver training -->
+                <div id="deliver-section" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-subtle);">
+                  <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:10px;">
+                    Mark Training Delivered
+                    <span style="font-weight:400;color:var(--text-muted);">— sets T2 automatically</span>
+                  </div>
+                  <div style="display:flex;gap:10px;align-items:flex-end;">
+                    <div class="form-group" style="margin:0;flex:1;max-width:200px;">
+                      <label>Date Delivered</label>
+                      <input type="date" id="t-delivered-date">
+                    </div>
+                    <button class="btn btn-success" id="mark-delivered-btn">
+                      Mark Delivered
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Effectiveness notes (shown when T2 is set) -->
+                <div id="effectiveness-section" style="display:none;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-subtle);">
+                  <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:10px;">
+                    Effectiveness Notes
+                    <span style="font-weight:400;color:var(--text-muted);">— Did the training produce improvement?</span>
+                  </div>
+                  <textarea id="t-effectiveness" rows="3"
+                    placeholder="Document your observations after training delivery…"></textarea>
+                  <button class="btn btn-secondary btn-sm" id="save-effectiveness-btn" style="margin-top:8px;">
+                    Save Notes
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Right sidebar -->
+          <div style="position:sticky;top:calc(var(--topbar-height)+20px);display:flex;flex-direction:column;gap:16px;">
+
+            <!-- Case info -->
+            <div class="card">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;
+                   color:var(--text-muted);margin-bottom:12px;padding-bottom:8px;
+                   border-bottom:1px solid var(--border-subtle);">Case Info</div>
+              <div id="case-info-fields"></div>
+            </div>
+
+            <!-- T4 notice -->
+            <div class="card" id="t4-pending-card">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;
+                   color:var(--text-muted);margin-bottom:10px;">How T4 Is Set</div>
+              <p style="font-size:12px;">
+                T4 is set <strong style="color:var(--text-primary);">automatically</strong> when
+                this same KPI is marked <em>Observed</em> in any subsequent approved review for
+                this officer. The case closes at that point.
+              </p>
+              <p style="font-size:12px;margin-top:8px;color:var(--text-muted);">
+                No manual action is required to close this case.
+              </p>
+            </div>
+
+            <!-- Closed summary -->
+            <div class="card" id="closed-summary" style="display:none;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;
+                   color:var(--success);margin-bottom:12px;">Case Closed</div>
+              <div id="closed-fields"></div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({ requireAuth: true });
+  renderNav(profile, 'delta-t');
+
+  const params = new URLSearchParams(window.location.search);
+  const caseId = params.get('id');
+  if (!caseId) { location.href = 'delta-t.html'; }
+
+  // ── Load case ──────────────────────────────────────────
+  const { data: dtCase, error } = await supabase
+    .from('delta_t_cases')
+    .select(`
+      *,
+      officer:personnel_roster(id, first_name, last_name, badge_number),
+      supervisor:profiles!supervisor_id(full_name),
+      source_review:bwc_reviews!source_review_id(id, atlas_case_number, incident_date)
+    `)
+    .eq('id', caseId)
+    .single();
+
+  document.getElementById('loading-state').style.display = 'none';
+
+  if (error || !dtCase) {
+    document.getElementById('not-found').style.display = 'block';
+    throw new Error('Not found');
+  }
+
+  document.getElementById('page-content').style.display = 'block';
+
+  const officerName = dtCase.officer
+    ? `${dtCase.officer.last_name}, ${dtCase.officer.first_name}` : 'Unknown Officer';
+
+  document.title = `ATLAS — Delta T · ${officerName}`;
+  renderTopbar(`Delta T — ${officerName}`);
+
+  // ── Render header ──────────────────────────────────────
+  document.getElementById('case-officer').textContent    = officerName;
+  document.getElementById('page-title').textContent      = 'Intervention Case';
+  document.getElementById('case-status-badge').innerHTML = statusBadge(dtCase.status, dtCase.is_overdue_flagged);
+
+  // Flagged banner
+  if (dtCase.is_overdue_flagged) {
+    const daysOpen = Math.floor((Date.now() - new Date(dtCase.t1_incident_date)) / 86400000);
+    document.getElementById('days-open-count').textContent = daysOpen;
+    document.getElementById('flagged-banner').style.display = 'flex';
+  }
+
+  // ── Render timeline ────────────────────────────────────
+  function renderTimeline() {
+    const t1 = dtCase.t1_incident_date;
+    const t2 = dtCase.t2_training_delivered;
+    const t4 = dtCase.t4_verification_date;
+
+    // T1 — always set
+    document.getElementById('label-t1').textContent = fmtDate(t1);
+
+    // T2
+    if (t2) {
+      document.getElementById('dot-t2').className = `dt-dot ${dtCase.status === 'closed' ? 'closed' : 'set'}`;
+      document.getElementById('label-t2').textContent = fmtDate(t2);
+      document.getElementById('line-t1t2').className  = `dt-line ${dtCase.status === 'closed' ? 'closed' : 'set'}`;
+      document.getElementById('interval-t1t2').textContent = `${dtCase.t1_to_t2_days ?? '?'}d`;
+      document.getElementById('interval-t1t2').className   = `dt-interval ${dtCase.status === 'closed' ? 'closed' : 'set'}`;
+    } else {
+      const daysElapsed = Math.floor((Date.now() - new Date(t1)) / 86400000);
+      document.getElementById('interval-t1t2').textContent = `${daysElapsed}d elapsed`;
+      document.getElementById('interval-t1t2').style.color = dtCase.is_overdue_flagged ? 'var(--danger)' : 'var(--text-muted)';
+    }
+
+    // T4
+    if (t4) {
+      document.getElementById('dot-t4').className   = 'dt-dot closed';
+      document.getElementById('label-t4').textContent = fmtDate(t4);
+      document.getElementById('line-t2t4').className  = 'dt-line closed';
+      if (dtCase.t2_to_t4_days != null) {
+        document.getElementById('interval-t2t4').textContent = `${dtCase.t2_to_t4_days}d`;
+        document.getElementById('interval-t2t4').className   = 'dt-interval closed';
+      }
+    }
+
+    // Delta T total
+    if (dtCase.delta_t_total != null) {
+      document.getElementById('delta-total-val').textContent = `${dtCase.delta_t_total} days`;
+      document.getElementById('delta-total-val').style.color = 'var(--success)';
+    } else if (t1) {
+      const running = Math.floor((Date.now() - new Date(t1)) / 86400000);
+      document.getElementById('delta-total-val').textContent = `${running}d running`;
+      document.getElementById('delta-total-val').style.color =
+        dtCase.is_overdue_flagged ? 'var(--danger)' : 'var(--warning)';
+    }
+  }
+
+  renderTimeline();
+
+  // ── KPI ────────────────────────────────────────────────
+  document.getElementById('kpi-text').textContent = dtCase.kpi_text_snapshot;
+  if (dtCase.source_review?.id) {
+    document.getElementById('source-review-link').href =
+      `review-detail.html?id=${dtCase.source_review.id}`;
+    document.getElementById('source-review-link').textContent =
+      `View Source Review ${dtCase.source_review.atlas_case_number || ''} →`;
+  }
+
+  // ── Case info sidebar ──────────────────────────────────
+  const infoRows = [
+    ['Officer',    officerName + (dtCase.officer?.badge_number ? ` (#${dtCase.officer.badge_number})` : '')],
+    ['Supervisor', dtCase.supervisor?.full_name || '—'],
+    ['Opened',     fmtDate(dtCase.created_at?.split('T')[0])]
+  ];
+  document.getElementById('case-info-fields').innerHTML = infoRows.map(([k, v]) => `
+    <div style="display:flex;justify-content:space-between;padding:6px 0;
+         border-bottom:1px solid var(--border-subtle);font-size:13px;">
+      <span style="color:var(--text-muted);font-size:12px;">${k}</span>
+      <span style="color:var(--text-primary);">${escHtml(String(v))}</span>
+    </div>`).join('');
+
+  // Closed summary
+  if (dtCase.status === 'closed' && dtCase.t4_verification_date) {
+    document.getElementById('t4-pending-card').style.display = 'none';
+    document.getElementById('closed-summary').style.display  = 'block';
+    document.getElementById('closed-fields').innerHTML = `
+      <div style="font-size:28px;font-weight:700;font-family:var(--font-heading);
+           color:var(--success);margin-bottom:4px;">${dtCase.delta_t_total ?? '?'} days</div>
+      <div style="font-size:12px;color:var(--text-muted);">Total Delta T (T1 → T4)</div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-secondary);">
+        KPI verified Observed on ${fmtDate(dtCase.t4_verification_date)}
+      </div>`;
+  }
+
+  // ── Load training assignment ───────────────────────────
+  let trainingId = null;
+
+  async function loadTraining() {
+    const { data: training } = await supabase
+      .from('training_assignments')
+      .select('*')
+      .eq('delta_t_case_id', caseId)
+      .single();
+
+    if (!training) {
+      // Show create form (unless case is closed)
+      if (dtCase.status === 'closed') {
+        document.getElementById('training-create-form').innerHTML =
+          '<div style="font-size:13px;color:var(--text-muted);">Case closed. No training assignment created.</div>';
+      }
+      return;
+    }
+
+    trainingId = training.id;
+    document.getElementById('training-create-form').style.display = 'none';
+    document.getElementById('training-display').style.display     = 'block';
+    document.getElementById('training-status-badge').innerHTML     = trainingBadge(training.completion_status);
+
+    // Render training fields
+    const fields = [
+      ['Name',         training.training_name],
+      ['Type',         training.training_type?.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())],
+      ['Provider',     training.provider + (training.provider_name ? ` — ${training.provider_name}` : '')],
+      ['Instructor',   training.instructor || '—'],
+      ['Date Ordered', fmtDate(training.date_ordered)],
+      ['Scheduled',    fmtDate(training.date_scheduled)],
+      ['Deadline',     fmtDate(training.deadline)],
+      ['Delivered',    training.date_delivered ? fmtDate(training.date_delivered) : 'Not yet delivered']
+    ];
+
+    document.getElementById('training-fields').innerHTML = fields.map(([k, v]) => `
+      <div class="training-status-row">
+        <div class="training-key">${k}</div>
+        <div class="training-val">${escHtml(String(v || '—'))}</div>
+      </div>`).join('');
+
+    // Deliver section — hide if already delivered or case closed
+    if (training.date_delivered || dtCase.status === 'closed') {
+      document.getElementById('deliver-section').style.display = 'none';
+    } else {
+      document.getElementById('t-delivered-date').value = today();
+    }
+
+    // Effectiveness notes — show once T2 is set
+    if (dtCase.t2_training_delivered) {
+      document.getElementById('effectiveness-section').style.display = 'block';
+      document.getElementById('t-effectiveness').value = training.effectiveness_notes || '';
+    }
+  }
+
+  // ── Create training assignment ─────────────────────────
+  window.toggleProviderName = function() {
+    const show = document.getElementById('t-provider').value === 'external';
+    document.getElementById('t-provider-name-group').style.display = show ? 'block' : 'none';
+  };
+
+  // Set default deadline
+  const defaultDeadline = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  document.getElementById('t-deadline').value = defaultDeadline.toISOString().split('T')[0];
+
+  document.getElementById('create-training-btn').addEventListener('click', async () => {
+    const name    = document.getElementById('t-name').value.trim();
+    const type    = document.getElementById('t-type').value;
+    const prov    = document.getElementById('t-provider').value;
+
+    if (!name || !type) {
+      showToast('error', 'Required', 'Training name and type are required.');
+      return;
+    }
+
+    const btn = document.getElementById('create-training-btn');
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
+
+    const { error } = await supabase.from('training_assignments').insert({
+      delta_t_case_id:   caseId,
+      officer_id:        dtCase.officer_id,
+      supervisor_id:     profile.id,
+      training_name:     name,
+      training_type:     type,
+      provider:          prov,
+      provider_name:     prov === 'external' ? document.getElementById('t-provider-name').value.trim() || null : null,
+      instructor:        document.getElementById('t-instructor').value.trim() || null,
+      date_scheduled:    document.getElementById('t-scheduled').value || null,
+      deadline:          document.getElementById('t-deadline').value || null
+    });
+
+    btn.classList.remove('btn-loading');
+    btn.disabled = false;
+
+    if (error) { showToast('error', 'Failed', error.message); return; }
+
+    showToast('success', 'Training assignment created');
+    await loadTraining();
+  });
+
+  // ── Mark delivered ─────────────────────────────────────
+  document.getElementById('mark-delivered-btn').addEventListener('click', async () => {
+    if (!trainingId) return;
+    const dateDelivered = document.getElementById('t-delivered-date').value;
+    if (!dateDelivered) { showToast('error', 'Required', 'Enter the delivery date.'); return; }
+
+    const btn = document.getElementById('mark-delivered-btn');
+    btn.classList.add('btn-loading'); btn.disabled = true;
+
+    const { error } = await supabase
+      .from('training_assignments')
+      .update({
+        date_delivered:    dateDelivered,
+        completion_status: 'completed',
+        updated_at:        new Date().toISOString()
+      })
+      .eq('id', trainingId);
+
+    btn.classList.remove('btn-loading'); btn.disabled = false;
+
+    if (error) { showToast('error', 'Failed', error.message); return; }
+
+    // DB trigger has already set T2 on the delta_t_case — reload to reflect
+    showToast('success', 'Training delivered', 'T2 has been set automatically.');
+    setTimeout(() => location.reload(), 1200);
+  });
+
+  // ── Save effectiveness notes ───────────────────────────
+  document.getElementById('save-effectiveness-btn').addEventListener('click', async () => {
+    if (!trainingId) return;
+    const notes = document.getElementById('t-effectiveness').value.trim();
+    const { error } = await supabase
+      .from('training_assignments')
+      .update({ effectiveness_notes: notes, updated_at: new Date().toISOString() })
+      .eq('id', trainingId);
+
+    if (error) { showToast('error', 'Failed', error.message); return; }
+    showToast('success', 'Notes saved');
+  });
+
+  // ── Helpers ────────────────────────────────────────────
+  function statusBadge(status, flagged) {
+    if (flagged) return '<span class="badge badge-danger">⚠ Flagged</span>';
+    const m = { open:'badge-warning', flagged:'badge-danger', closed:'badge-success' };
+    const l = status ? status.charAt(0).toUpperCase() + status.slice(1) : '—';
+    return `<span class="badge ${m[status]||'badge-muted'}">${l}</span>`;
+  }
+
+  function trainingBadge(s) {
+    const m = { assigned:'badge-muted', in_progress:'badge-accent', completed:'badge-success',
+                overdue:'badge-danger', waived:'badge-muted' };
+    const l = s ? s.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase()) : '—';
+    return `<span class="badge ${m[s]||'badge-muted'}">${l}</span>`;
+  }
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function today() {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(type, title, body = '') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}</div>`;
+    c.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+
+  await loadTraining();
+</script>
+</body>
+</html>

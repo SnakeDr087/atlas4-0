@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Agency Settings</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .patch-upload-area {
+      border: 2px dashed var(--border);
+      border-radius: var(--border-radius-lg);
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color var(--transition);
+      background: var(--bg-base);
+    }
+    .patch-upload-area:hover { border-color: var(--border-focus); }
+    .patch-upload-area.has-patch { border-style: solid; border-color: var(--accent); }
+    .patch-preview {
+      width: 96px; height: 96px; object-fit: contain;
+      margin: 0 auto 12px; display: block;
+      border-radius: var(--border-radius);
+    }
+    .section-divider {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-muted);
+      padding-bottom: 10px; margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div id="loading-state" style="display:flex;align-items:center;justify-content:center;height:300px;">
+        <div class="spinner spinner-lg"></div>
+      </div>
+
+      <div id="page-content" style="display:none;" class="animate-fade-in">
+
+        <div class="page-header flex items-center justify-between">
+          <div>
+            <h1 id="settings-title">Agency Settings</h1>
+            <p id="settings-sub"></p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" id="save-all-btn">Save All Changes</button>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+          <!-- Left column -->
+          <div style="display:flex;flex-direction:column;gap:20px;">
+
+            <!-- Agency Identity -->
+            <div class="card">
+              <div class="section-divider">Agency Identity</div>
+              <div class="form-group">
+                <label>Agency Name <span class="required">*</span></label>
+                <input type="text" id="ag-name">
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Phone</label>
+                  <input type="tel" id="ag-phone" placeholder="(555) 555-5555">
+                </div>
+                <div class="form-group">
+                  <label>Website</label>
+                  <input type="url" id="ag-website" placeholder="https://anytown-pd.gov">
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Agency Size
+                  <span style="font-size:11px;color:var(--text-muted);">— number of sworn officers</span>
+                </label>
+                <input type="number" id="ag-size" min="1" style="max-width:140px;">
+              </div>
+            </div>
+
+            <!-- Address -->
+            <div class="card">
+              <div class="section-divider">Address</div>
+              <div class="form-group">
+                <label>Street Address</label>
+                <input type="text" id="ag-address" placeholder="1 Police Plaza">
+              </div>
+              <div class="form-row three">
+                <div class="form-group">
+                  <label>City</label>
+                  <input type="text" id="ag-city">
+                </div>
+                <div class="form-group">
+                  <label>State</label>
+                  <select id="ag-state">
+                    <option value="">—</option>
+                    <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+                    <option>CA</option><option>CO</option><option>CT</option><option>DE</option>
+                    <option>FL</option><option>GA</option><option>HI</option><option>ID</option>
+                    <option>IL</option><option>IN</option><option>IA</option><option>KS</option>
+                    <option>KY</option><option>LA</option><option>ME</option><option>MD</option>
+                    <option>MA</option><option>MI</option><option>MN</option><option>MS</option>
+                    <option>MO</option><option>MT</option><option>NE</option><option>NV</option>
+                    <option>NH</option><option>NJ</option><option>NM</option><option>NY</option>
+                    <option>NC</option><option>ND</option><option>OH</option><option>OK</option>
+                    <option>OR</option><option>PA</option><option>RI</option><option>SC</option>
+                    <option>SD</option><option>TN</option><option>TX</option><option>UT</option>
+                    <option>VT</option><option>VA</option><option>WA</option><option>WV</option>
+                    <option>WI</option><option>WY</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>ZIP</label>
+                  <input type="text" id="ag-zip" maxlength="10">
+                </div>
+              </div>
+            </div>
+
+            <!-- Performance Settings -->
+            <div class="card">
+              <div class="section-divider">Performance Settings</div>
+              <div class="form-group">
+                <label>Minimum Review Threshold
+                  <span style="font-size:11px;color:var(--text-muted);">— reviews before score displays</span>
+                </label>
+                <input type="number" id="min-threshold" min="1" max="50" style="max-width:120px;">
+                <div class="form-hint">Default: 5</div>
+              </div>
+              <div class="form-group">
+                <label>Required Review Frequency
+                  <span style="font-size:11px;color:var(--text-muted);">— days between required reviews</span>
+                </label>
+                <input type="number" id="review-frequency" min="7" max="365" style="max-width:120px;">
+                <div class="form-hint">Default: 30 days</div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Right column -->
+          <div style="display:flex;flex-direction:column;gap:20px;">
+
+            <!-- Agency Badge / Patch -->
+            <div class="card">
+              <div class="section-divider">Agency Badge / Patch</div>
+              <p style="font-size:13px;margin-bottom:16px;">
+                Appears on printed reports and saved PDFs. Upload a PNG or JPG with a transparent or white background.
+              </p>
+              <div class="patch-upload-area" id="patch-upload-area" onclick="document.getElementById('patch-file-input').click()">
+                <img id="patch-preview" class="patch-preview" style="display:none;">
+                <div id="patch-placeholder">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                       style="width:36px;height:36px;margin:0 auto 10px;color:var(--text-muted);">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">
+                    Click to upload badge / patch
+                  </div>
+                  <div style="font-size:11px;color:var(--text-muted);">PNG or JPG · Max 2MB</div>
+                </div>
+              </div>
+              <input type="file" id="patch-file-input" accept="image/png,image/jpeg"
+                     style="display:none;" onchange="handlePatchUpload(this)">
+              <div id="patch-uploading" style="display:none;text-align:center;margin-top:12px;">
+                <div class="spinner" style="display:inline-block;"></div>
+                <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">Uploading…</span>
+              </div>
+              <div id="patch-current-url" style="display:none;margin-top:10px;">
+                <div style="font-size:11px;color:var(--text-muted);">Current patch URL:</div>
+                <div id="patch-url-display" style="font-size:11px;color:var(--accent);word-break:break-all;"></div>
+                <button class="btn btn-danger btn-sm" style="margin-top:8px;" onclick="removePatch()">Remove Patch</button>
+              </div>
+            </div>
+
+            <!-- Agency Head -->
+            <div class="card">
+              <div class="section-divider">Agency Head</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Title</label>
+                  <input type="text" id="ag-head-title" placeholder="Chief of Police">
+                </div>
+                <div class="form-group">
+                  <label>Name</label>
+                  <input type="text" id="ag-head-name" placeholder="Full name">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Email</label>
+                  <input type="email" id="ag-head-email">
+                </div>
+                <div class="form-group">
+                  <label>Phone</label>
+                  <input type="tel" id="ag-head-phone" placeholder="(555) 555-5555">
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script src="error-handler.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin', 'agency_admin', 'chief']
+  });
+  renderNav(profile, 'agency-settings');
+  renderTopbar('Agency Settings');
+
+  const params   = new URLSearchParams(window.location.search);
+  const agencyId = params.get('id') || profile.agency_id;
+  if (!agencyId) { location.href = 'dashboard.html'; }
+
+  const { data: agency } = await supabase
+    .from('agencies').select('*').eq('id', agencyId).single();
+
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('page-content').style.display  = 'block';
+
+  document.getElementById('settings-title').textContent =
+    agency?.name || 'Agency Settings';
+  document.getElementById('settings-sub').textContent =
+    [agency?.city, agency?.state, agency?.zip].filter(Boolean).join(', ');
+
+  // Populate all fields
+  const fields = {
+    'ag-name':        agency?.name,
+    'ag-phone':       agency?.phone,
+    'ag-website':     agency?.website,
+    'ag-size':        agency?.agency_size,
+    'ag-address':     agency?.address,
+    'ag-city':        agency?.city,
+    'ag-state':       agency?.state,
+    'ag-zip':         agency?.zip,
+    'ag-head-title':  agency?.agency_head_title,
+    'ag-head-name':   agency?.agency_head_name,
+    'ag-head-email':  agency?.agency_head_email,
+    'ag-head-phone':  agency?.agency_head_phone,
+    'min-threshold':  agency?.min_review_threshold ?? 5,
+    'review-frequency': agency?.required_review_frequency ?? 30
+  };
+
+  Object.entries(fields).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el && val != null) el.value = val;
+  });
+
+  // Patch preview
+  if (agency?.patch_url) {
+    showPatchPreview(agency.patch_url);
+  }
+
+  // ── Patch upload ─────────────────────────────────────
+  window.handlePatchUpload = async function(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('error', 'File too large', 'Max 2MB.');
+      return;
+    }
+
+    document.getElementById('patch-uploading').style.display = 'block';
+
+    const fileName = `${agencyId}/patch.${file.name.split('.').pop()}`;
+
+    const { data, error } = await supabase.storage
+      .from('agency-patches')
+      .upload(fileName, file, { upsert: true });
+
+    document.getElementById('patch-uploading').style.display = 'none';
+
+    if (error) { showToast('error', 'Upload failed', error.message); return; }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('agency-patches')
+      .getPublicUrl(fileName);
+
+    // Save URL to agency record
+    await supabase.from('agencies')
+      .update({ patch_url: publicUrl }).eq('id', agencyId);
+
+    showPatchPreview(publicUrl);
+    showToast('success', 'Patch uploaded');
+  };
+
+  function showPatchPreview(url) {
+    const preview = document.getElementById('patch-preview');
+    const placeholder = document.getElementById('patch-placeholder');
+    const area = document.getElementById('patch-upload-area');
+    const currentUrl = document.getElementById('patch-current-url');
+
+    preview.src = url;
+    preview.style.display = 'block';
+    placeholder.style.display = 'none';
+    area.classList.add('has-patch');
+    currentUrl.style.display = 'block';
+    document.getElementById('patch-url-display').textContent = url;
+  }
+
+  window.removePatch = async function() {
+    await supabase.from('agencies').update({ patch_url: null }).eq('id', agencyId);
+    document.getElementById('patch-preview').style.display = 'none';
+    document.getElementById('patch-placeholder').style.display = 'block';
+    document.getElementById('patch-upload-area').classList.remove('has-patch');
+    document.getElementById('patch-current-url').style.display = 'none';
+    document.getElementById('patch-file-input').value = '';
+    showToast('success', 'Patch removed');
+  };
+
+  // ── Save all ──────────────────────────────────────────
+  document.getElementById('save-all-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('save-all-btn');
+    btn.classList.add('btn-loading'); btn.disabled = true;
+
+    const { error } = await supabase.from('agencies').update({
+      name:                      document.getElementById('ag-name').value.trim(),
+      phone:                     document.getElementById('ag-phone').value.trim() || null,
+      website:                   document.getElementById('ag-website').value.trim() || null,
+      agency_size:               parseInt(document.getElementById('ag-size').value) || null,
+      address:                   document.getElementById('ag-address').value.trim() || null,
+      city:                      document.getElementById('ag-city').value.trim() || null,
+      state:                     document.getElementById('ag-state').value || null,
+      zip:                       document.getElementById('ag-zip').value.trim() || null,
+      agency_head_title:         document.getElementById('ag-head-title').value.trim() || null,
+      agency_head_name:          document.getElementById('ag-head-name').value.trim() || null,
+      agency_head_email:         document.getElementById('ag-head-email').value.trim() || null,
+      agency_head_phone:         document.getElementById('ag-head-phone').value.trim() || null,
+      min_review_threshold:      parseInt(document.getElementById('min-threshold').value) || 5,
+      required_review_frequency: parseInt(document.getElementById('review-frequency').value) || 30,
+      updated_at:                new Date().toISOString()
+    }).eq('id', agencyId);
+
+    btn.classList.remove('btn-loading'); btn.disabled = false;
+
+    if (error) { showToast('error', 'Save failed', error.message); return; }
+
+    // Update subtitle
+    const city  = document.getElementById('ag-city').value.trim();
+    const state = document.getElementById('ag-state').value;
+    const zip   = document.getElementById('ag-zip').value.trim();
+    document.getElementById('settings-sub').textContent =
+      [city, state, zip].filter(Boolean).join(', ');
+
+    showToast('success', 'All changes saved');
+  });
+
+  function showToast(type, title, body = '') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}</div>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 3500);
+  }
+</script>
+</body>
+</html>

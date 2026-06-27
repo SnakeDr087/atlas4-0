@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Auto Select</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .pool-grid { display: flex; flex-direction: column; gap: 8px; }
+    .pool-card {
+      display: grid; grid-template-columns: 1fr auto auto;
+      align-items: center; gap: 16px; padding: 12px 16px;
+      background: var(--bg-base); border: 1px solid var(--border);
+      border-radius: var(--border-radius); transition: border-color var(--transition);
+    }
+    .pool-card:hover { border-color: var(--border-focus); }
+    .pool-card.excluded { opacity: 0.4; }
+    .pool-officer-name  { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .pool-officer-meta  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .weight-pill {
+      display: flex; align-items: center; justify-content: center;
+      width: 48px; height: 48px; border-radius: 50%;
+      font-family: var(--font-heading); font-size: 16px; font-weight: 700;
+    }
+    .weight-critical { background: var(--danger-dim);  color: var(--danger); }
+    .weight-elevated { background: var(--warning-dim); color: var(--warning); }
+    .weight-standard { background: var(--accent-dim);  color: var(--accent); }
+    .weight-excluded { background: var(--bg-overlay);  color: var(--text-muted); }
+    .tier-label {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+      text-transform: uppercase; text-align: center; margin-top: 3px;
+    }
+    .receipt-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--border-radius-xl);
+      padding: 28px 32px;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    .receipt-header {
+      text-align: center; padding-bottom: 20px;
+      border-bottom: 1px solid var(--border); margin-bottom: 20px;
+    }
+    .receipt-title { font-family: var(--font-heading); font-size: 13px; font-weight: 700;
+      letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-muted); }
+    .receipt-officer { font-family: var(--font-heading); font-size: 26px; font-weight: 800;
+      color: var(--text-primary); margin: 8px 0 4px; }
+    .receipt-row { display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+    .receipt-row:last-child { border-bottom: none; }
+    .receipt-key   { color: var(--text-muted); font-weight: 500; }
+    .receipt-val   { color: var(--text-primary); font-weight: 600; text-align: right; }
+    .receipt-formula {
+      background: var(--bg-base); border: 1px solid var(--border);
+      border-radius: var(--border-radius); padding: 12px 14px; margin: 16px 0;
+      font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);
+      line-height: 1.6;
+    }
+    .select-btn {
+      background: linear-gradient(135deg, var(--accent), #1d6fe8);
+      color: white; border: none; padding: 16px 32px;
+      border-radius: var(--border-radius-lg); font-size: 15px; font-weight: 700;
+      font-family: var(--font-heading); cursor: pointer; width: 100%;
+      transition: all var(--transition-md); letter-spacing: 0.05em;
+      box-shadow: 0 4px 16px rgba(45,126,247,0.3);
+    }
+    .select-btn:hover  { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(45,126,247,0.4); }
+    .select-btn:active { transform: translateY(0); }
+    .select-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .past-receipts-row {
+      display: grid; grid-template-columns: auto 1fr auto auto auto;
+      gap: 12px; align-items: center; padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle); font-size: 13px;
+    }
+    .past-receipts-row:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header">
+        <h1>Auto Select</h1>
+        <p>Weighted stochastic officer selection. Removes supervisor bias from review selection.</p>
+      </div>
+
+      <div id="loading-state" style="display:flex;align-items:center;justify-content:center;height:300px;">
+        <div class="spinner spinner-lg"></div>
+      </div>
+
+      <div id="no-roster" class="empty-state" style="display:none;">
+        <div class="empty-title">No officers on your roster</div>
+        <div class="empty-text">Build your roster first to use Auto Select.</div>
+        <a href="roster.html" class="btn btn-primary" style="margin-top:16px;">Go to Roster →</a>
+      </div>
+
+      <div id="main-content" style="display:none;" class="animate-fade-in">
+        <div style="display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start;">
+
+          <!-- Left: officer pool -->
+          <div>
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Eligible Officer Pool</div>
+                  <div class="card-subtitle" id="pool-summary"></div>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="refresh-pool-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                    <polyline points="1,4 1,10 7,10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
+                  </svg>
+                  Refresh
+                </button>
+              </div>
+
+              <!-- Tier legend -->
+              <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <div class="weight-pill weight-critical" style="width:28px;height:28px;font-size:12px;">4×</div>
+                  <div>
+                    <div style="font-size:12px;font-weight:600;color:var(--danger);">Critical</div>
+                    <div style="font-size:10px;color:var(--text-muted);">Score &lt;80 or &gt;40 incidents</div>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <div class="weight-pill weight-elevated" style="width:28px;height:28px;font-size:12px;">2×</div>
+                  <div>
+                    <div style="font-size:12px;font-weight:600;color:var(--warning);">Elevated</div>
+                    <div style="font-size:10px;color:var(--text-muted);">Score &lt;90 or &gt;25 incidents</div>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <div class="weight-pill weight-standard" style="width:28px;height:28px;font-size:12px;">1×</div>
+                  <div>
+                    <div style="font-size:12px;font-weight:600;color:var(--accent);">Standard</div>
+                    <div style="font-size:10px;color:var(--text-muted);">All others</div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="pool-list" class="pool-grid"></div>
+
+              <div id="window-reset-notice" class="alert alert-info" style="display:none;margin-top:12px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span class="alert-message">All officers were reviewed within 30 days. The 30-day exclusion window has been reset — all officers are eligible.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: select + receipt -->
+          <div style="position:sticky;top:calc(var(--topbar-height)+20px);">
+
+            <!-- Receipt or select prompt -->
+            <div id="receipt-panel">
+              <div class="card" style="text-align:center;padding:32px 24px;" id="pre-select-panel">
+                <div style="width:56px;height:56px;margin:0 auto 16px;border-radius:50%;
+                     background:var(--accent-dim);display:flex;align-items:center;justify-content:center;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.75" style="width:24px;height:24px;">
+                    <circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/>
+                  </svg>
+                </div>
+                <h3 style="margin-bottom:8px;">Ready to Select</h3>
+                <p style="margin-bottom:24px;font-size:13px;">
+                  The algorithm will choose one officer from the eligible pool using weighted random selection.
+                  Every run is permanently logged.
+                </p>
+                <button class="select-btn" id="run-select-btn">Run Auto Select</button>
+              </div>
+
+              <!-- Receipt (hidden until selection runs) -->
+              <div id="receipt-output" style="display:none;">
+                <div class="receipt-card">
+                  <div class="receipt-header">
+                    <div class="receipt-title">Auto Select — Official Receipt</div>
+                    <div class="receipt-officer" id="r-officer"></div>
+                    <div id="r-rank-badge" style="margin-top:4px;"></div>
+                  </div>
+
+                  <div class="receipt-row">
+                    <span class="receipt-key">Assigned Incident Type</span>
+                    <span class="receipt-val" id="r-incident-type"></span>
+                  </div>
+                  <div class="receipt-row">
+                    <span class="receipt-key">Priority Level</span>
+                    <span class="receipt-val" id="r-priority"></span>
+                  </div>
+                  <div class="receipt-row">
+                    <span class="receipt-key">Selection Weight</span>
+                    <span class="receipt-val mono" id="r-weight"></span>
+                  </div>
+                  <div class="receipt-row">
+                    <span class="receipt-key">Officers in Pool</span>
+                    <span class="receipt-val mono" id="r-pool-size"></span>
+                  </div>
+                  <div class="receipt-row">
+                    <span class="receipt-key">Selecting Supervisor</span>
+                    <span class="receipt-val" id="r-supervisor"></span>
+                  </div>
+                  <div class="receipt-row">
+                    <span class="receipt-key">Timestamp</span>
+                    <span class="receipt-val mono" id="r-timestamp"></span>
+                  </div>
+
+                  <div class="receipt-formula" id="r-formula"></div>
+
+                  <div style="display:flex;gap:8px;margin-top:16px;">
+                    <a id="start-review-btn" href="#" class="btn btn-primary" style="flex:1;">
+                      Start Review →
+                    </a>
+                    <button class="btn btn-secondary btn-sm" onclick="resetSelect()">
+                      Run Again
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Past receipts -->
+            <div class="card" style="margin-top:16px;">
+              <div class="card-header">
+                <div class="card-title">Recent Selections</div>
+                <span style="font-size:12px;color:var(--text-muted);">Permanent audit log</span>
+              </div>
+              <div id="past-receipts-list">
+                <div style="display:flex;justify-content:center;padding:20px;">
+                  <div class="spinner"></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth, getCurrentProfile } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin', 'supervisor']
+  });
+  renderNav(profile, 'auto-select');
+  renderTopbar('Auto Select');
+
+  // ── Tier incident type assignments ─────────────────────
+  const TIER_INCIDENTS = {
+    critical: ['Arrest','DWI','Domestic Violence','Vehicular Pursuit','Use of Force'],
+    elevated: ['Traffic Stop','Medical Call','Suspicious Event','Mental Health Assist'],
+    standard: ['Citizen Contact','BWC Mic Check','Crash Investigation','Fire Scene Assist']
+  };
+
+  const TIER_WEIGHTS = { critical: 4, elevated: 2, standard: 1 };
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  let eligiblePool   = [];
+  let windowReset    = false;
+  let incidentTypeMap = {}; // name → id
+
+  // ── Load incident type IDs ─────────────────────────────
+  async function loadIncidentTypeMap() {
+    const { data } = await supabase
+      .from('incident_types')
+      .select('id, name')
+      .or(`agency_id.eq.${profile.agency_id},is_global_default.eq.true`)
+      .eq('officer_status', 'active');
+    (data || []).forEach(t => { incidentTypeMap[t.name] = t.id; });
+  }
+
+  // ── Load officer pool ──────────────────────────────────
+  async function loadPool() {
+    document.getElementById('loading-state').style.display = 'flex';
+    document.getElementById('main-content').style.display = 'none';
+
+    // Get supervisor's roster
+    const { data: rosterRows } = await supabase
+      .from('supervisor_rosters')
+      .select('officer:personnel_roster(id, first_name, last_name, badge_number, performance_score, officer_status, rank:agency_ranks(rank_name))')
+      .eq('supervisor_id', profile.id);
+
+    const roster = (rosterRows || [])
+      .map(r => r.officer)
+      .filter(o => o && o.officer_status === 'active');
+
+    document.getElementById('loading-state').style.display = 'none';
+
+    if (!roster.length) {
+      document.getElementById('no-roster').style.display = 'block';
+      return;
+    }
+
+    // Get review counts and last review dates
+    const officerIds = roster.map(o => o.id);
+    const thirtyDaysAgo = new Date(Date.now() - THIRTY_DAYS_MS).toISOString().split('T')[0];
+
+    const { data: recentReviews } = await supabase
+      .from('bwc_reviews')
+      .select('primary_officer_id, incident_date')
+      .in('primary_officer_id', officerIds)
+      .eq('status', 'approved')
+      .gte('incident_date', thirtyDaysAgo);
+
+    const { data: allApproved } = await supabase
+      .from('bwc_reviews')
+      .select('primary_officer_id')
+      .in('primary_officer_id', officerIds)
+      .eq('status', 'approved')
+      .eq('is_ia_referral', false);
+
+    // Build recent set
+    const recentSet = new Set((recentReviews || []).map(r => r.primary_officer_id));
+    const countMap  = {};
+    (allApproved || []).forEach(r => {
+      countMap[r.primary_officer_id] = (countMap[r.primary_officer_id] || 0) + 1;
+    });
+
+    // Build pool
+    let pool = roster.map(o => {
+      const score    = o.performance_score ?? 100;
+      const count    = countMap[o.id] || 0;
+      const excluded = recentSet.has(o.id);
+      const tier     = getTier(score, count);
+      return { ...o, score, count, excluded, tier, weight: TIER_WEIGHTS[tier] };
+    });
+
+    // If all excluded → reset window
+    const allExcluded = pool.every(o => o.excluded);
+    windowReset = allExcluded;
+    if (allExcluded) pool.forEach(o => { o.excluded = false; });
+
+    eligiblePool = pool;
+
+    document.getElementById('window-reset-notice').style.display = allExcluded ? 'flex' : 'none';
+    document.getElementById('main-content').style.display = 'block';
+
+    renderPool(pool);
+
+    const eligible = pool.filter(o => !o.excluded).length;
+    document.getElementById('pool-summary').textContent =
+      `${eligible} eligible · ${pool.filter(o=>o.excluded).length} excluded (reviewed within 30 days)`;
+
+    await loadPastReceipts();
+  }
+
+  function getTier(score, count) {
+    if (score < 80 || count > 40) return 'critical';
+    if (score < 90 || count > 25) return 'elevated';
+    return 'standard';
+  }
+
+  function renderPool(pool) {
+    const list = document.getElementById('pool-list');
+    list.innerHTML = pool.map(o => {
+      const name = `${o.last_name}, ${o.first_name}`;
+      const pillClass = o.excluded ? 'weight-excluded' : `weight-${o.tier}`;
+      const pillText  = o.excluded ? '—' : `${o.weight}×`;
+      const tierLabel = o.excluded ? 'Excluded' : o.tier.charAt(0).toUpperCase() + o.tier.slice(1);
+
+      return `
+        <div class="pool-card ${o.excluded ? 'excluded' : ''}">
+          <div>
+            <div class="pool-officer-name">${escHtml(name)}</div>
+            <div class="pool-officer-meta">
+              ${o.rank?.rank_name ? o.rank.rank_name + ' · ' : ''}
+              Score: ${o.score != null ? Math.round(o.score) : 'N/A'} · 
+              Reviews: ${o.count}
+              ${o.excluded ? ' · <span style="color:var(--text-muted)">Reviewed within 30 days</span>' : ''}
+            </div>
+          </div>
+          <div style="text-align:center;">
+            <div class="weight-pill ${pillClass}">${pillText}</div>
+            <div class="tier-label" style="color:${tierColor(o.tier, o.excluded)}">${tierLabel}</div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function tierColor(tier, excluded) {
+    if (excluded) return 'var(--text-muted)';
+    return { critical:'var(--danger)', elevated:'var(--warning)', standard:'var(--accent)' }[tier];
+  }
+
+  // ── Auto Select algorithm ──────────────────────────────
+  document.getElementById('run-select-btn').addEventListener('click', runAutoSelect);
+
+  async function runAutoSelect() {
+    const eligible = eligiblePool.filter(o => !o.excluded);
+    if (!eligible.length) {
+      showToast('error', 'No eligible officers', 'All officers in your roster are excluded.');
+      return;
+    }
+
+    const btn = document.getElementById('run-select-btn');
+    btn.disabled = true;
+    btn.textContent = 'Selecting…';
+
+    // Build weighted pool (duplicate entries by weight)
+    const weightedPool = [];
+    eligible.forEach(o => {
+      for (let i = 0; i < o.weight; i++) weightedPool.push(o);
+    });
+
+    // Weighted random selection
+    const selected = weightedPool[Math.floor(Math.random() * weightedPool.length)];
+
+    // Assign incident type from selected tier
+    const tierIncidents = TIER_INCIDENTS[selected.tier];
+    const incidentName  = tierIncidents[Math.floor(Math.random() * tierIncidents.length)];
+    const incidentTypeId = incidentTypeMap[incidentName] || null;
+
+    // Build methodology note
+    const totalWeight  = eligible.reduce((sum, o) => sum + o.weight, 0);
+    const officerWeight = selected.weight;
+    const probability   = ((officerWeight / totalWeight) * 100).toFixed(1);
+    const formula = [
+      `Pool size:      ${eligible.length} eligible officer${eligible.length !== 1 ? 's' : ''}`,
+      `Officer weight: ${officerWeight}× (${selected.tier} priority)`,
+      `Total weight:   ${totalWeight}`,
+      `Selection prob: ${officerWeight}/${totalWeight} = ${probability}%`,
+      `Method:         Weighted stochastic sampling (Math.random())`
+    ].join('\n');
+
+    const timestamp = new Date();
+
+    // Save receipt (permanent — never deleted)
+    const { data: receipt, error } = await supabase
+      .from('auto_select_receipts')
+      .insert({
+        agency_id:          profile.agency_id,
+        supervisor_id:      profile.id,
+        officer_id:         selected.id,
+        incident_type_id:   incidentTypeId,
+        incident_type_name: incidentName,
+        priority_level:     selected.tier,
+        selection_weight:   selected.weight,
+        methodology_notes:  formula
+      })
+      .select('id')
+      .single();
+
+    btn.disabled = false;
+    btn.textContent = 'Run Auto Select';
+
+    if (error) {
+      showToast('error', 'Receipt save failed', error.message);
+      return;
+    }
+
+    // Log activity
+    await supabase.from('activity_log').insert({
+      agency_id: profile.agency_id, actor_id: profile.id,
+      action: 'auto_select_run', target_type: 'auto_select_receipt', target_id: receipt?.id,
+      metadata: { officer_id: selected.id, incident_type: incidentName, tier: selected.tier }
+    });
+
+    // Render receipt
+    renderReceipt(selected, incidentName, formula, timestamp, eligible.length);
+
+    // Reload past receipts
+    await loadPastReceipts();
+  }
+
+  function renderReceipt(officer, incidentName, formula, timestamp, poolSize) {
+    const name = `${officer.last_name}, ${officer.first_name}`;
+
+    document.getElementById('r-officer').textContent = name;
+    document.getElementById('r-rank-badge').innerHTML =
+      officer.rank?.rank_name
+        ? `<span class="badge badge-muted">${officer.rank.rank_name}</span>` : '';
+    document.getElementById('r-incident-type').textContent = incidentName;
+    document.getElementById('r-priority').innerHTML =
+      `<span class="badge ${officer.tier === 'critical' ? 'badge-danger' : officer.tier === 'elevated' ? 'badge-warning' : 'badge-accent'}">
+        ${officer.tier.charAt(0).toUpperCase() + officer.tier.slice(1)}
+       </span>`;
+    document.getElementById('r-weight').textContent = `${officer.weight}× weight`;
+    document.getElementById('r-pool-size').textContent = `${poolSize} officers`;
+    document.getElementById('r-supervisor').textContent = profile.full_name;
+    document.getElementById('r-timestamp').textContent = timestamp.toLocaleString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    document.getElementById('r-formula').textContent = formula;
+
+    // Set Start Review link — pre-populate officer on review form
+    document.getElementById('start-review-btn').href =
+      `review-new.html?officer=${officer.id}`;
+
+    document.getElementById('pre-select-panel').style.display = 'none';
+    document.getElementById('receipt-output').style.display   = 'block';
+  }
+
+  window.resetSelect = function() {
+    document.getElementById('pre-select-panel').style.display = 'block';
+    document.getElementById('receipt-output').style.display   = 'none';
+  };
+
+  // ── Past receipts ──────────────────────────────────────
+  async function loadPastReceipts() {
+    const { data: receipts } = await supabase
+      .from('auto_select_receipts')
+      .select(`
+        id, incident_type_name, priority_level, created_at,
+        officer:personnel_roster(first_name, last_name),
+        review:bwc_reviews(atlas_case_number)
+      `)
+      .eq('supervisor_id', profile.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const container = document.getElementById('past-receipts-list');
+
+    if (!receipts?.length) {
+      container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No selections yet.</div>';
+      return;
+    }
+
+    container.innerHTML = receipts.map(r => {
+      const name  = r.officer ? `${r.officer.last_name}, ${r.officer.first_name}` : '—';
+      const color = { critical:'var(--danger)', elevated:'var(--warning)', standard:'var(--accent)' }[r.priority_level] || 'var(--text-muted)';
+      return `
+        <div class="past-receipts-row">
+          <span class="badge ${r.priority_level === 'critical' ? 'badge-danger' : r.priority_level === 'elevated' ? 'badge-warning' : 'badge-accent'}"
+                style="font-size:9px;padding:2px 6px;">${r.priority_level}</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${escHtml(name)}</div>
+            <div style="font-size:11px;color:var(--text-muted);">${escHtml(r.incident_type_name)}</div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">
+            ${new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Helpers ────────────────────────────────────────────
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(type, title, body='') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body?`<div class="toast-body">${body}</div>`:''}</div>`;
+    c.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+
+  document.getElementById('refresh-pool-btn').addEventListener('click', loadPool);
+
+  // ── Init ──────────────────────────────────────────────
+  await loadIncidentTypeMap();
+  await loadPool();
+</script>
+</body>
+</html>

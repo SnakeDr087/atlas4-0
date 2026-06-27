@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — In-Person Reviews</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>In-Person Reviews</h1>
+          <p>Coaching sessions, one-on-ones, and field supervision contacts. No score impact.</p>
+        </div>
+        <button class="btn btn-primary" id="new-session-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M12 5v14M5 12h14"/></svg>
+          Log Session
+        </button>
+      </div>
+
+      <!-- Filters -->
+      <div class="card mb-4">
+        <div class="filters-bar">
+          <div class="search-input-wrap" style="max-width:240px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="filter-search" placeholder="Officer name…">
+          </div>
+          <select id="filter-type" style="max-width:190px;">
+            <option value="">All Session Types</option>
+            <option value="coaching">Coaching</option>
+            <option value="one_on_one">One-on-One</option>
+            <option value="field_supervision">Field Supervision</option>
+            <option value="performance_review">Performance Review</option>
+            <option value="disciplinary">Disciplinary</option>
+            <option value="other">Other</option>
+          </select>
+          <input type="date" id="filter-from" style="max-width:145px;" title="From date">
+          <input type="date" id="filter-to"   style="max-width:145px;" title="To date">
+          <button class="btn btn-ghost btn-sm" id="clear-filters">Clear</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="card">
+        <div id="table-loading" style="display:flex;justify-content:center;padding:48px;">
+          <div class="spinner"></div>
+        </div>
+        <div id="table-content" style="display:none;">
+          <div class="table-container">
+            <table class="atlas-table">
+              <thead>
+                <tr><th>Officer</th><th>Session Type</th><th>Date</th><th>Supervisor</th><th>Notes Preview</th><th></th></tr>
+              </thead>
+              <tbody id="sessions-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination">
+            <span id="pagination-info" style="font-size:12px;color:var(--text-muted);"></span>
+            <div class="pagination-controls" id="pagination-controls"></div>
+          </div>
+        </div>
+        <div id="empty-state" class="empty-state" style="display:none;">
+          <div class="empty-title">No sessions logged</div>
+          <div class="empty-text">Log coaching sessions, one-on-ones, and field supervision contacts here.</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Log Session Modal -->
+<div class="modal-overlay" id="session-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Log In-Person Session</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Officer <span class="required">*</span></label>
+          <select id="session-officer">
+            <option value="">— Select officer —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Session Type <span class="required">*</span></label>
+          <select id="session-type">
+            <option value="">— Select type —</option>
+            <option value="coaching">Coaching</option>
+            <option value="one_on_one">One-on-One</option>
+            <option value="field_supervision">Field Supervision</option>
+            <option value="performance_review">Performance Review</option>
+            <option value="disciplinary">Disciplinary</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="max-width:200px;">
+        <label>Session Date <span class="required">*</span></label>
+        <input type="date" id="session-date">
+      </div>
+      <div class="form-group">
+        <label>Notes
+          <span style="font-size:11px;color:var(--text-muted);">— summary of the session, topics discussed, agreed actions</span>
+        </label>
+        <textarea id="session-notes" rows="5"
+          placeholder="Document the session topics, officer response, and any action items…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="save-session-btn">Log Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="detail-title"></div>
+      <button class="modal-close" onclick="document.getElementById('detail-modal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('detail-modal').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script src="error-handler.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const PAGE_SIZE = 25;
+  let currentPage = 0;
+  let totalCount  = 0;
+  let debounce;
+
+  const { profile } = await initAuth({ requireAuth: true });
+  renderNav(profile, 'dashboard'); // no nav key for in-person reviews — closest is dashboard
+  renderTopbar('In-Person Reviews');
+
+  // Default date
+  document.getElementById('session-date').value = new Date().toISOString().split('T')[0];
+
+  // Load officer roster
+  async function loadOfficerOptions() {
+    let q;
+    if (['internal_affairs','training_bureau','super_admin'].includes(profile.role)) {
+      q = supabase.from('personnel_roster')
+        .select('id, first_name, last_name, badge_number')
+        .eq('agency_id', profile.agency_id).eq('officer_status','active').order('last_name');
+    } else {
+      q = supabase.from('supervisor_rosters')
+        .select('officer:personnel_roster(id, first_name, last_name, badge_number)')
+        .eq('supervisor_id', profile.id);
+    }
+    const { data } = await q;
+    const officers = profile.role === 'supervisor'
+      ? (data || []).map(r => r.officer).filter(Boolean)
+      : (data || []);
+
+    const sel = document.getElementById('session-officer');
+    officers.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o.id;
+      opt.textContent = `${o.last_name}, ${o.first_name}${o.badge_number ? ' (#' + o.badge_number + ')' : ''}`;
+      sel.appendChild(opt);
+    });
+  }
+
+  // Load sessions
+  async function loadSessions(page = 0) {
+    currentPage = page;
+    document.getElementById('table-loading').style.display = 'flex';
+    document.getElementById('table-content').style.display = 'none';
+    document.getElementById('empty-state').style.display   = 'none';
+
+    const search   = document.getElementById('filter-search').value.trim();
+    const type     = document.getElementById('filter-type').value;
+    const dateFrom = document.getElementById('filter-from').value;
+    const dateTo   = document.getElementById('filter-to').value;
+    const from = page * PAGE_SIZE;
+    const to   = from + PAGE_SIZE - 1;
+
+    let q = supabase
+      .from('in_person_reviews')
+      .select(`
+        id, review_date, session_type, notes, created_at,
+        officer:personnel_roster(id, first_name, last_name, badge_number),
+        supervisor:profiles!supervisor_id(full_name)
+      `)
+      .eq('agency_id', profile.agency_id)
+      .order('review_date', { ascending: false })
+      .range(from, to);
+
+    if (profile.role === 'supervisor') q = q.eq('supervisor_id', profile.id);
+    if (type)     q = q.eq('session_type', type);
+    if (dateFrom) q = q.gte('review_date', dateFrom);
+    if (dateTo)   q = q.lte('review_date', dateTo);
+
+    const { data: sessions, error } = await q;
+
+    // Count
+    let cq = supabase.from('in_person_reviews')
+      .select('id', { count:'exact', head:true })
+      .eq('agency_id', profile.agency_id);
+    if (profile.role === 'supervisor') cq = cq.eq('supervisor_id', profile.id);
+    const { count } = await cq;
+    totalCount = count ?? 0;
+
+    document.getElementById('table-loading').style.display = 'none';
+
+    if (error || !sessions?.length) {
+      document.getElementById('empty-state').style.display = 'block';
+      return;
+    }
+
+    // Client-side search
+    let filtered = sessions;
+    if (search) {
+      const term = search.toLowerCase();
+      filtered = sessions.filter(s =>
+        s.officer?.last_name?.toLowerCase().includes(term) ||
+        s.officer?.first_name?.toLowerCase().includes(term)
+      );
+    }
+
+    if (!filtered.length) {
+      document.getElementById('empty-state').style.display = 'block';
+      return;
+    }
+
+    const tbody = document.getElementById('sessions-tbody');
+    tbody.innerHTML = filtered.map(s => {
+      const officer  = s.officer ? `${s.officer.last_name}, ${s.officer.first_name}` : '—';
+      const typeLabel = formatType(s.session_type);
+      const preview   = s.notes ? s.notes.slice(0, 60) + (s.notes.length > 60 ? '…' : '') : '—';
+      return `
+        <tr style="cursor:pointer;" onclick="openDetail('${s.id}')">
+          <td class="col-primary">${escHtml(officer)}</td>
+          <td>${typeBadge(s.session_type)}</td>
+          <td>${fmtDate(s.review_date)}</td>
+          <td style="font-size:12px;color:var(--text-muted);">${s.supervisor?.full_name || '—'}</td>
+          <td style="font-size:12px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(preview)}</td>
+          <td>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 style="width:14px;height:14px;color:var(--text-muted);">
+              <polyline points="9,18 15,12 9,6"/>
+            </svg>
+          </td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('pagination-info').textContent =
+      `${Math.min(from + 1, totalCount)}–${Math.min(to + 1, totalCount)} of ${totalCount}`;
+
+    renderPagination();
+    document.getElementById('table-content').style.display = 'block';
+  }
+
+  function renderPagination() {
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+    const ctrl = document.getElementById('pagination-controls');
+    ctrl.innerHTML = '';
+    const prev = document.createElement('button');
+    prev.className = 'page-btn'; prev.textContent = '←';
+    prev.disabled = currentPage === 0;
+    prev.onclick = () => loadSessions(currentPage - 1);
+    ctrl.appendChild(prev);
+    const next = document.createElement('button');
+    next.className = 'page-btn'; next.textContent = '→';
+    next.disabled = currentPage >= totalPages - 1;
+    next.onclick = () => loadSessions(currentPage + 1);
+    ctrl.appendChild(next);
+  }
+
+  // Open detail
+  window.openDetail = async function(sessionId) {
+    const { data: s } = await supabase
+      .from('in_person_reviews')
+      .select(`*, officer:personnel_roster(first_name, last_name, badge_number),
+               supervisor:profiles!supervisor_id(full_name)`)
+      .eq('id', sessionId).single();
+    if (!s) return;
+
+    const officer = s.officer ? `${s.officer.last_name}, ${s.officer.first_name}` : '—';
+    document.getElementById('detail-title').textContent = `${formatType(s.session_type)} — ${officer}`;
+    document.getElementById('detail-body').innerHTML = `
+      <div style="display:grid;grid-template-columns:130px 1fr;gap:8px 12px;margin-bottom:16px;font-size:13px;">
+        <span style="color:var(--text-muted);">Officer</span>
+        <span style="color:var(--text-primary);">${escHtml(officer)}${s.officer?.badge_number ? ` (#${s.officer.badge_number})` : ''}</span>
+        <span style="color:var(--text-muted);">Session Type</span>
+        <span>${typeBadge(s.session_type)}</span>
+        <span style="color:var(--text-muted);">Date</span>
+        <span>${fmtDate(s.review_date)}</span>
+        <span style="color:var(--text-muted);">Supervisor</span>
+        <span>${s.supervisor?.full_name || '—'}</span>
+        <span style="color:var(--text-muted);">Logged</span>
+        <span style="font-size:12px;">${new Date(s.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' })}</span>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;">Session Notes</div>
+      <div style="font-size:13px;color:var(--text-secondary);white-space:pre-wrap;
+           background:var(--bg-elevated);border-radius:var(--border-radius);padding:12px 14px;
+           min-height:60px;">${escHtml(s.notes || 'No notes recorded.')}</div>`;
+
+    document.getElementById('detail-modal').classList.add('open');
+  };
+
+  // Save session
+  document.getElementById('new-session-btn').addEventListener('click', () => {
+    document.getElementById('session-modal').classList.add('open');
+    document.getElementById('session-officer').value = '';
+    document.getElementById('session-type').value = '';
+    document.getElementById('session-notes').value = '';
+  });
+
+  document.getElementById('save-session-btn').addEventListener('click', async () => {
+    const officerId   = document.getElementById('session-officer').value;
+    const sessionType = document.getElementById('session-type').value;
+    const date        = document.getElementById('session-date').value;
+    const notes       = document.getElementById('session-notes').value.trim();
+
+    if (!officerId || !sessionType || !date) {
+      showToast('error', 'Required', 'Officer, session type, and date are required.');
+      return;
+    }
+
+    const btn = document.getElementById('save-session-btn');
+    btn.classList.add('btn-loading'); btn.disabled = true;
+
+    const { error } = await supabase.from('in_person_reviews').insert({
+      agency_id:    profile.agency_id,
+      supervisor_id: profile.id,
+      officer_id:   officerId,
+      review_date:  date,
+      session_type: sessionType,
+      notes:        notes || null
+    });
+
+    btn.classList.remove('btn-loading'); btn.disabled = false;
+
+    if (error) { showToast('error', 'Failed', error.message); return; }
+
+    // Activity log
+    await supabase.from('activity_log').insert({
+      agency_id:   profile.agency_id,
+      actor_id:    profile.id,
+      action:      'in_person_review_logged',
+      target_type: 'in_person_review',
+      metadata:    { officer_id: officerId, session_type: sessionType }
+    });
+
+    closeModal();
+    showToast('success', 'Session logged');
+    await loadSessions(0);
+  });
+
+  // Filters
+  ['filter-type','filter-from','filter-to'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => loadSessions(0));
+  });
+  document.getElementById('filter-search').addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => loadSessions(0), 300);
+  });
+  document.getElementById('clear-filters').addEventListener('click', () => {
+    ['filter-search','filter-type','filter-from','filter-to'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    loadSessions(0);
+  });
+
+  window.closeModal = () => document.getElementById('session-modal').classList.remove('open');
+
+  // Helpers
+  function formatType(type) {
+    const labels = {
+      coaching: 'Coaching', one_on_one: 'One-on-One',
+      field_supervision: 'Field Supervision', performance_review: 'Performance Review',
+      disciplinary: 'Disciplinary', other: 'Other'
+    };
+    return labels[type] || type || '—';
+  }
+
+  function typeBadge(type) {
+    const colors = {
+      coaching: 'badge-coaching', one_on_one: 'badge-accent',
+      field_supervision: 'badge-success', performance_review: 'badge-info',
+      disciplinary: 'badge-danger', other: 'badge-muted'
+    };
+    return `<span class="badge ${colors[type] || 'badge-muted'}">${formatType(type)}</span>`;
+  }
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(type, title, body = '') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}</div>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 3500);
+  }
+
+  await Promise.all([loadOfficerOptions(), loadSessions(0)]);
+</script>
+</body>
+</html>

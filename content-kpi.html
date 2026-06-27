@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Incident Types & KPIs</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Incident Types &amp; KPIs</h1>
+          <p>Customize the KPI checklist for each incident type. Global defaults are read-only — add overrides for your agency.</p>
+        </div>
+        <button class="btn btn-primary" id="add-type-btn">+ Add Incident Type</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start;">
+
+        <!-- Incident type list -->
+        <div class="card">
+          <div class="card-title" style="margin-bottom:12px;">Incident Types</div>
+          <div id="type-loading" style="display:flex;justify-content:center;padding:24px;"><div class="spinner"></div></div>
+          <div id="type-list" style="display:none;"></div>
+        </div>
+
+        <!-- KPI list for selected type -->
+        <div class="card" id="kpi-panel">
+          <div style="font-size:13px;color:var(--text-muted);padding:24px 0;text-align:center;">
+            Select an incident type to view and edit its KPIs
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Add type modal -->
+<div class="modal-overlay" id="type-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Add Incident Type</div>
+      <button class="modal-close" onclick="closeTypeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Type Name <span class="required">*</span></label>
+        <input type="text" id="type-name" placeholder="e.g. Officer-Involved Shooting">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeTypeModal()">Cancel</button>
+      <button class="btn btn-primary" id="save-type-btn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin', 'agency_admin']
+  });
+  renderNav(profile, 'content-kpi');
+  renderTopbar('Incident Types & KPIs');
+
+  let selectedTypeId = null;
+
+  async function loadTypes() {
+    const { data: types } = await supabase
+      .from('incident_types')
+      .select('id, name, is_active, is_global_default, agency_id')
+      .or(`agency_id.eq.${profile.agency_id},is_global_default.eq.true`)
+      .order('display_order');
+
+    document.getElementById('type-loading').style.display = 'none';
+    document.getElementById('type-list').style.display = 'block';
+
+    document.getElementById('type-list').innerHTML = (types || []).map(t => `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;
+           border-radius:var(--border-radius);cursor:pointer;transition:background var(--transition);
+           ${t.id === selectedTypeId ? 'background:var(--accent-dim);' : ''}"
+           id="type-row-${t.id}"
+           onclick="selectType('${t.id}', '${escHtml(t.name)}', ${t.is_global_default}, '${t.agency_id || ''}')">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:${t.id === selectedTypeId ? '600' : '500'};
+               color:${t.is_active ? 'var(--text-primary)' : 'var(--text-muted)'};">
+            ${escHtml(t.name)}
+          </div>
+          <div style="font-size:10px;color:var(--text-muted);">
+            ${t.is_global_default ? 'Global default' : 'Agency-specific'}
+            ${!t.is_active ? ' · Inactive' : ''}
+          </div>
+        </div>
+        ${!t.is_global_default ? `
+          <button onclick="event.stopPropagation();toggleType('${t.id}', ${t.is_active})"
+                  class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px;">
+            ${t.is_active ? 'Hide' : 'Show'}
+          </button>
+          <button onclick="event.stopPropagation();deleteType('${t.id}', ${t.is_global_default})"
+                  class="btn btn-danger btn-sm" style="font-size:10px;padding:2px 6px;">
+            Delete
+          </button>` : ''}
+      </div>`).join('');
+  }
+
+  window.selectType = async function(typeId, typeName, isGlobal, agencyId) {
+    selectedTypeId = typeId;
+    await loadTypes(); // re-render to highlight selection
+
+    const panel = document.getElementById('kpi-panel');
+
+    const { data: allKpis } = await supabase
+      .from('kpi_definitions')
+      .select('id, kpi_text, is_active, is_global_default, agency_id')
+      .eq('incident_type_id', typeId)
+      .eq('is_active', true)
+      .order('display_order');
+
+    // Filter client-side: show global defaults + this agency's KPIs
+    const kpis = (allKpis || []).filter(k =>
+      k.is_global_default || k.agency_id === profile.agency_id
+    );
+
+    panel.innerHTML = `
+      <div class="card-header">
+        <div>
+          <div class="card-title">${escHtml(typeName)}</div>
+          <div class="card-subtitle">${(kpis || []).length} active KPIs</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="add-kpi-btn">+ Add KPI</button>
+      </div>
+      <div id="kpi-list">
+        ${(kpis || []).map((k, i) => `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;
+               border-bottom:1px solid var(--border-subtle);" id="kpi-row-${k.id}">
+            <div style="font-size:13px;color:var(--text-secondary);flex:1;">${escHtml(k.kpi_text)}</div>
+            ${k.is_global_default
+              ? `<button onclick="suppressKpi('${k.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--text-muted);">Hide</button>
+                 <span style="font-size:10px;color:var(--text-muted);margin-left:4px;">Global</span>`
+              : `<button onclick="deleteKpi('${k.id}')" class="btn btn-danger btn-sm" style="font-size:10px;">Delete</button>`}
+          </div>`).join('') || '<div style="color:var(--text-muted);font-size:13px;padding:12px 0;">No KPIs defined for this type.</div>'}
+      </div>
+      <div id="add-kpi-form" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        <div class="form-group">
+          <label>KPI Text <span class="required">*</span></label>
+          <input type="text" id="new-kpi-text" placeholder="e.g. Officer identified themselves by name and badge number">
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="saveKpi('${typeId}')">Add KPI</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('add-kpi-form').style.display='none'">Cancel</button>
+        </div>
+      </div>`;
+
+    document.getElementById('add-kpi-btn').addEventListener('click', () => {
+      document.getElementById('add-kpi-form').style.display = 'block';
+      document.getElementById('new-kpi-text').focus();
+    });
+  };
+
+  window.saveKpi = async function(typeId) {
+    const text = document.getElementById('new-kpi-text').value.trim();
+    if (!text) return;
+    const { data: existing } = await supabase.from('kpi_definitions')
+      .select('display_order').eq('incident_type_id', typeId).order('display_order', { ascending: false }).limit(1).single();
+    const nextOrder = (existing?.display_order || 0) + 1;
+    const { error } = await supabase.from('kpi_definitions').insert({
+      agency_id: profile.agency_id, incident_type_id: typeId,
+      kpi_text: text, display_order: nextOrder
+    });
+    if (error) { showToast('error', 'Failed', error.message); return; }
+    showToast('success', 'KPI added');
+    await selectType(typeId, '', false, profile.agency_id);
+  };
+
+  // Hard delete agency-specific KPI
+  window.deleteKpi = async function(kpiId) {
+    if (!confirm('Delete this KPI? This cannot be undone.')) return;
+    const { error } = await supabase.from('kpi_definitions').delete().eq('id', kpiId);
+    if (error) { showToast('error', 'Delete failed', error.message); return; }
+    showToast('success', 'KPI deleted');
+    if (selectedTypeId) {
+      const { data: t } = await supabase.from('incident_types').select('name').eq('id', selectedTypeId).single();
+      await selectType(selectedTypeId, t?.name || '', false, profile.agency_id);
+    }
+  };
+
+  // Suppress global KPI for this agency (adds to suppressed_for_agencies array)
+  window.suppressKpi = async function(kpiId) {
+    if (!confirm('Hide this global KPI for your agency? You can restore it via the database.')) return;
+    const { error } = await supabase.from('kpi_definitions')
+      .update({ suppressed_for_agencies: supabase.rpc('array_append', { arr: 'suppressed_for_agencies', val: profile.agency_id }) })
+      .eq('id', kpiId);
+    // Fallback: just set inactive for this context
+    await supabase.from('kpi_definitions').update({ is_active: false }).eq('id', kpiId).eq('is_global_default', false);
+    showToast('success', 'KPI hidden');
+    if (selectedTypeId) {
+      const { data: t } = await supabase.from('incident_types').select('name').eq('id', selectedTypeId).single();
+      await selectType(selectedTypeId, t?.name || '', false, profile.agency_id);
+    }
+  };
+
+  window.toggleType = async function(typeId, isActive) {
+    await supabase.from('incident_types').update({ is_active: !isActive }).eq('id', typeId);
+    await loadTypes();
+    showToast('success', isActive ? 'Type hidden' : 'Type shown');
+  };
+
+  window.deleteType = async function(typeId, isGlobal) {
+    const warning = isGlobal
+      ? 'This is a global default incident type. Deleting it removes it for ALL agencies. Are you sure?'
+      : 'Delete this incident type and all its KPIs? This cannot be undone.';
+    if (!confirm(warning)) return;
+    // Delete all KPIs for this type first
+    await supabase.from('kpi_definitions').delete().eq('incident_type_id', typeId);
+    const { error } = await supabase.from('incident_types').delete().eq('id', typeId);
+    if (error) { showToast('error', 'Delete failed', error.message); return; }
+    if (selectedTypeId === typeId) {
+      selectedTypeId = null;
+      document.getElementById('kpi-panel').innerHTML = '<div style="font-size:13px;color:var(--text-muted);padding:24px 0;text-align:center;">Select an incident type to view and edit its KPIs</div>';
+    }
+    await loadTypes();
+    showToast('success', 'Incident type deleted');
+  };
+
+  // Add incident type
+  document.getElementById('add-type-btn').addEventListener('click', () =>
+    document.getElementById('type-modal').classList.add('open'));
+
+  document.getElementById('save-type-btn').addEventListener('click', async () => {
+    const name = document.getElementById('type-name').value.trim();
+    if (!name) return;
+    const { error } = await supabase.from('incident_types').insert({
+      agency_id: profile.agency_id, name, is_active: true
+    });
+    if (error) { showToast('error', 'Failed', error.message); return; }
+    window.closeTypeModal();
+    showToast('success', 'Incident type added');
+    await loadTypes();
+  });
+
+  window.closeTypeModal = () => {
+    document.getElementById('type-modal').classList.remove('open');
+    document.getElementById('type-name').value = '';
+  };
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(type, title, body = '') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}</div>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 3000);
+  }
+
+  await loadTypes();
+</script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — PIPs</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header">
+        <h1>Performance Improvement Plans</h1>
+        <p>Restricted. Visible to creating supervisor, Chief, IA, Training Bureau, and named individuals.</p>
+      </div>
+
+      <div class="card mb-4">
+        <div class="filters-bar">
+          <select id="filter-status" style="max-width:160px;">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+            <option value="withdrawn">Withdrawn</option>
+          </select>
+          <input type="date" id="filter-from" style="max-width:145px;" title="From date">
+          <input type="date" id="filter-to"   style="max-width:145px;" title="To date">
+          <button class="btn btn-ghost btn-sm" id="clear-filters">Clear</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="table-loading" style="display:flex;align-items:center;justify-content:center;padding:48px;">
+          <div class="spinner"></div>
+        </div>
+        <div id="table-content" style="display:none;">
+          <div class="table-container">
+            <table class="atlas-table">
+              <thead>
+                <tr>
+                  <th>PIP #</th>
+                  <th>Officer</th>
+                  <th>Created By</th>
+                  <th>Start Date</th>
+                  <th>End Date</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="pip-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="pagination">
+            <span id="pagination-info" style="color:var(--text-muted);font-size:12px;"></span>
+            <div class="pagination-controls" id="pagination-controls"></div>
+          </div>
+        </div>
+        <div id="empty-state" class="empty-state" style="display:none;">
+          <div class="empty-title">No PIPs found</div>
+          <div class="empty-text">PIPs are opened when a review is submitted with outcome = PIP.</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const PAGE_SIZE = 25;
+  let currentPage = 0;
+
+  const { profile } = await initAuth({ requireAuth: true });
+  renderNav(profile, 'pips');
+  renderTopbar('PIPs');
+
+  async function loadPips(page = 0) {
+    currentPage = page;
+    document.getElementById('table-loading').style.display = 'flex';
+    document.getElementById('table-content').style.display = 'none';
+    document.getElementById('empty-state').style.display   = 'none';
+
+    const status   = document.getElementById('filter-status').value;
+    const dateFrom = document.getElementById('filter-from').value;
+    const dateTo   = document.getElementById('filter-to').value;
+    const from = page * PAGE_SIZE;
+    const to   = from + PAGE_SIZE - 1;
+
+    let q = supabase
+      .from('pips')
+      .select(`
+        id, case_number, status, start_date, end_date, created_at,
+        officer:personnel_roster(first_name, last_name, badge_number),
+        supervisor:profiles!creating_supervisor_id(full_name)
+      `)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (profile.agency_id) q = q.eq('agency_id', profile.agency_id);
+    if (profile.role === 'supervisor') q = q.eq('creating_supervisor_id', profile.id);
+    if (status)   q = q.eq('status', status);
+    if (dateFrom) q = q.gte('start_date', dateFrom);
+    if (dateTo)   q = q.lte('start_date', dateTo);
+
+    const { data: pips, error } = await q;
+
+    document.getElementById('table-loading').style.display = 'none';
+    if (error || !pips?.length) {
+      document.getElementById('empty-state').style.display = 'block';
+      return;
+    }
+
+    const tbody = document.getElementById('pip-tbody');
+    tbody.innerHTML = pips.map(p => `
+      <tr onclick="location.href='pip-detail.html?id=${p.id}'" style="cursor:pointer;">
+        <td class="col-mono">${p.case_number || '—'}</td>
+        <td class="col-primary">
+          ${p.officer ? `${p.officer.last_name}, ${p.officer.first_name}` : '—'}
+        </td>
+        <td>${p.supervisor?.full_name || '—'}</td>
+        <td>${fmtDate(p.start_date)}</td>
+        <td>${fmtDate(p.end_date)}</td>
+        <td>${pipBadge(p.status)}</td>
+        <td>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               style="width:14px;height:14px;color:var(--text-muted);">
+            <polyline points="9,18 15,12 9,6"/>
+          </svg>
+        </td>
+      </tr>
+    `).join('');
+
+    document.getElementById('table-content').style.display = 'block';
+  }
+
+  ['filter-status','filter-from','filter-to'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => loadPips(0));
+  });
+  document.getElementById('clear-filters').addEventListener('click', () => {
+    ['filter-status','filter-from','filter-to'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    loadPips(0);
+  });
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function pipBadge(s) {
+    const m = { active:'badge-warning', completed:'badge-success',
+                failed:'badge-danger', withdrawn:'badge-muted' };
+    const l = s ? s.replace(/\b\w/g,c=>c.toUpperCase()) : '—';
+    return `<span class="badge ${m[s]||'badge-muted'}">${l}</span>`;
+  }
+
+  await loadPips(0);
+</script>
+</body>
+</html>

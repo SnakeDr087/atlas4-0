@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Smart card grid (Super Admin) ── */
+    .sa-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+    .sa-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:22px 20px 18px; cursor:pointer; transition:box-shadow .15s,border-color .15s; position:relative; overflow:hidden; }
+    .sa-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.08); border-color:#c7d2fe; }
+    .sa-card.active { border-color:var(--primary); box-shadow:0 4px 20px rgba(79,70,229,.12); }
+    .sa-card .sa-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; margin-bottom:14px; }
+    .sa-card .sa-val { font-size:2rem; font-weight:800; line-height:1; margin-bottom:4px; color:var(--text-dark); }
+    .sa-card .sa-val.green { color:#16a34a; } .sa-card .sa-val.amber { color:#d97706; } .sa-card .sa-val.red { color:var(--danger); } .sa-card .sa-val.indigo { color:#4f46e5; }
+    .sa-card .sa-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); }
+    .sa-card .sa-sub { font-size:12px; color:var(--text-muted); margin-top:6px; }
+    .sa-card .sa-chevron { position:absolute; top:18px; right:16px; font-size:12px; color:var(--text-muted); transition:transform .2s; }
+    .sa-card.active .sa-chevron { transform:rotate(180deg); color:var(--primary); }
+    .sa-card .sa-accent { position:absolute; bottom:0; left:0; right:0; height:3px; border-radius:0 0 10px 10px; opacity:0; transition:opacity .15s; }
+    .sa-card:hover .sa-accent, .sa-card.active .sa-accent { opacity:1; }
+    .sa-blue .sa-accent, .sa-blue.sa-icon { background:#4f46e5; } .sa-blue .sa-icon { background:#eef2ff; }
+    .sa-green .sa-accent { background:#16a34a; } .sa-green .sa-icon { background:#f0fdf4; }
+    .sa-amber .sa-accent { background:#d97706; } .sa-amber .sa-icon { background:#fffbeb; }
+    .sa-red .sa-accent { background:var(--danger); } .sa-red .sa-icon { background:#fef2f2; }
+    /* intel panel */
+    .sa-panel-wrap { margin-bottom:24px; }
+    .sa-panel { background:#fff; border:1px solid var(--primary); border-radius:10px; overflow:hidden; animation:panelIn .18s ease; }
+    @keyframes panelIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+    .sa-panel-header { padding:14px 20px; background:#f5f7ff; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    .sa-panel-header h4 { margin:0; font-size:14px; font-weight:700; color:var(--text-dark); }
+    .sa-panel-search { display:flex; align-items:center; gap:8px; background:#fff; border:1px solid var(--border); border-radius:6px; padding:6px 12px; min-width:220px; }
+    .sa-panel-search input { border:none; outline:none; font-size:13px; color:var(--text-dark); width:100%; background:transparent; font-family:inherit; }
+    .sa-panel-body { padding:0; max-height:380px; overflow-y:auto; }
+    .sa-row { display:flex; align-items:center; padding:14px 20px; border-bottom:1px solid var(--border); transition:background .1s; }
+    .sa-row:last-child { border-bottom:none; } .sa-row:hover { background:#f8faff; }
+    .sa-dot { width:10px; height:10px; border-radius:50%; margin-right:14px; flex-shrink:0; }
+    .sa-dot.green{background:#16a34a} .sa-dot.amber{background:#d97706} .sa-dot.grey{background:#9ca3af}
+    .sa-health { font-size:11px; font-weight:700; text-transform:uppercase; padding:2px 8px; border-radius:10px; margin-right:16px; }
+    .health-active{background:#d1fae5;color:#065f46} .health-stale{background:#fef3c7;color:#92400e} .health-inactive{background:#f3f4f6;color:#6b7280}
+    .sa-pattern-tag { background:#fef3c7; color:#92400e; border-radius:10px; padding:2px 8px; font-size:11px; font-weight:700; }
+    .sa-panel-footer { padding:12px 20px; border-top:1px solid var(--border); text-align:right; background:#fafafa; }
+    .sa-panel-footer a { font-size:13px; color:var(--primary); text-decoration:none; font-weight:600; }
+    .sa-loading { padding:32px 20px; text-align:center; color:var(--text-muted); font-size:14px; }
+    .sa-date { font-size:13px; color:var(--text-muted); margin-bottom:20px; font-weight:500; }
+  </style>
+</head>
+<body>
+
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content" id="page-content">
+
+      <!-- Loading spinner -->
+      <div id="loading-state" style="display:flex;align-items:center;justify-content:center;height:300px;">
+        <div class="spinner spinner-lg"></div>
+      </div>
+
+      <!-- Dashboard content -->
+      <div id="dashboard-content" style="display:none;" class="animate-fade-in">
+
+        <!-- Access denied banner -->
+        <div id="access-denied-banner" class="alert alert-danger" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          <span class="alert-message">You do not have permission to access that page.</span>
+        </div>
+
+        <!-- Page header -->
+        <div class="page-header flex items-center justify-between">
+          <div>
+            <h1 id="dash-greeting">Dashboard</h1>
+            <p id="dash-subtitle"></p>
+          </div>
+          <div id="dash-actions"></div>
+        </div>
+
+        <!-- Role dashboard body -->
+        <div id="role-dashboard"></div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth, ROLE_LABELS } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  // ── Failsafe spinner ────────────────────────────────────────
+  const _failsafe = setTimeout(() => {
+    const ls = document.getElementById('loading-state');
+    if (ls && ls.style.display !== 'none') {
+      ls.innerHTML = `<div style="text-align:center;">
+        <div style="font-size:14px;font-weight:600;color:var(--text-secondary);margin-bottom:12px;">Taking longer than expected…</div>
+        <button class="btn btn-primary" onclick="window.location.reload()">Reload</button>
+        <div style="margin-top:10px;"><a href="login.html" style="font-size:12px;color:var(--text-muted);">Return to login</a></div>
+      </div>`;
+    }
+  }, 10000);
+
+  // ── Boot ────────────────────────────────────────────────────
+  let profile;
+  try {
+    const result = await initAuth({ requireAuth: true });
+    profile = result.profile;
+  } catch(e) {
+    console.error('[ATLAS] initAuth failed:', e);
+    document.getElementById('loading-state').style.display = 'none';
+    document.getElementById('dashboard-content').innerHTML =
+      '<div class="alert alert-danger" style="margin:24px;">Failed to load dashboard. <a href="login.html">Return to login</a></div>';
+    document.getElementById('dashboard-content').style.display = '';
+    throw e;
+  }
+  if (!profile) throw new Error('no_profile');
+
+  clearTimeout(_failsafe);
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('dashboard-content').style.display = '';
+
+  const role = profile.role;
+  const agencyId = profile.agency_id;
+
+  renderNav(profile, 'dashboard');
+  renderTopbar('Dashboard');
+
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const firstName = (profile.full_name || 'there').split(' ')[0];
+  document.getElementById('dash-greeting').textContent = `${greeting}, ${firstName}`;
+
+  if (new URLSearchParams(window.location.search).get('error') === 'access_denied') {
+    document.getElementById('access-denied-banner').style.display = 'flex';
+  }
+
+  // ── Route to role dashboard ─────────────────────────────────
+  try {
+    if      (role === 'super_admin')       await renderSuperAdmin();
+    else if (role === 'chief')             await renderChief();
+    else if (role === 'internal_affairs')  await renderIA();
+    else if (role === 'training_bureau')   await renderTraining();
+    else if (role === 'agency_admin')      await renderAgencyAdmin();
+    else if (role === 'supervisor')        await renderSupervisor();
+  } catch(e) {
+    console.error('[ATLAS] Dashboard render error:', e);
+    document.getElementById('role-dashboard').innerHTML =
+      `<div class="alert alert-danger">Dashboard failed to load. Check console for details. <button class="btn btn-sm" onclick="window.location.reload()">Retry</button></div>`;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // SUPER ADMIN
+  // ════════════════════════════════════════════════════════════
+  async function renderSuperAdmin() {
+    document.getElementById('dash-subtitle').textContent = 'Super Admin · Platform overview';
+    document.getElementById('dash-actions').innerHTML = '';
+
+    const dateStr = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+    let agencies = [], reviews = [], tickets = [];
+    try {
+      const [agenciesRes, reviewsRes, ticketsRes] = await Promise.all([
+        supabase.from('agencies').select('id, name, created_at').eq('is_active', true).order('name'),
+        supabase.from('bwc_reviews').select('id, agency_id, overall_score, status, created_at').order('created_at',{ascending:false}),
+        supabase.from('trouble_tickets').select('id, subject, category, status, created_at, agency_id').eq('status','open').limit(50),
+      ]);
+      agencies = agenciesRes.data || [];
+      reviews  = reviewsRes.data  || [];
+      tickets  = ticketsRes.data  || [];
+    } catch(e) {
+      console.error('[ATLAS] Super admin data load error:', e);
+    }
+
+    // aggregate
+    const aMap = {};
+    agencies.forEach(a => { aMap[a.id] = {...a, count:0, total:0, lastReview:null}; });
+    reviews.forEach(r => {
+      if (!aMap[r.agency_id]) return;
+      aMap[r.agency_id].count++;
+      aMap[r.agency_id].total += (r.overall_score||0);
+      if (!aMap[r.agency_id].lastReview || r.created_at > aMap[r.agency_id].lastReview)
+        aMap[r.agency_id].lastReview = r.created_at;
+    });
+    const aRows = Object.values(aMap).map(a => ({...a, avg: a.count ? a.total/a.count : null}));
+
+    const allScores = aRows.filter(a=>a.avg!=null).map(a=>a.avg);
+    const platAvg   = allScores.length ? allScores.reduce((x,y)=>x+y,0)/allScores.length : null;
+    const pending   = reviews.filter(r=>r.status==='pending_approval').length;
+
+    const catMap = {};
+    tickets.forEach(t => { const c = t.category||'General'; catMap[c]=(catMap[c]||0)+1; });
+    const patterns = Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
+
+    document.getElementById('role-dashboard').innerHTML = `
+      <div class="sa-date">📅 ${dateStr}</div>
+      <div class="sa-grid">
+        <div class="sa-card sa-blue" id="sc-agencies" onclick="saToggle('agencies')">
+          <span class="sa-chevron">▼</span>
+          <div class="sa-icon" style="background:#eef2ff;">🏛️</div>
+          <div class="sa-val indigo">${agencies.length}</div>
+          <div class="sa-lbl">Active Agencies</div>
+          <div class="sa-sub">Click to view health</div>
+          <div class="sa-accent"></div>
+        </div>
+        <div class="sa-card sa-blue" id="sc-reviews" onclick="saToggle('reviews')">
+          <span class="sa-chevron">▼</span>
+          <div class="sa-icon" style="background:#eef2ff;">📋</div>
+          <div class="sa-val indigo">${reviews.length}</div>
+          <div class="sa-lbl">Total Reviews</div>
+          <div class="sa-sub">${pending > 0 ? `${pending} pending approval` : 'All caught up'}</div>
+          <div class="sa-accent"></div>
+        </div>
+        <div class="sa-card ${platAvg==null?'sa-blue':platAvg>=80?'sa-green':platAvg>=65?'sa-amber':'sa-red'}" id="sc-scores" onclick="saToggle('scores')">
+          <span class="sa-chevron">▼</span>
+          <div class="sa-icon" style="background:${platAvg==null?'#eef2ff':platAvg>=80?'#f0fdf4':platAvg>=65?'#fffbeb':'#fef2f2'};">📊</div>
+          <div class="sa-val ${platAvg==null?'':platAvg>=80?'green':platAvg>=65?'amber':'red'}">${platAvg!=null?platAvg.toFixed(1):'—'}</div>
+          <div class="sa-lbl">Platform Avg Score</div>
+          <div class="sa-sub">${allScores.length} scored agenc${allScores.length===1?'y':'ies'}</div>
+          <div class="sa-accent"></div>
+        </div>
+        <div class="sa-card ${tickets.length>0?'sa-amber':'sa-blue'}" id="sc-tickets" onclick="saToggle('tickets')">
+          <span class="sa-chevron">▼</span>
+          <div class="sa-icon" style="background:${tickets.length>0?'#fffbeb':'#eef2ff'};">🎫</div>
+          <div class="sa-val ${tickets.length>0?'amber':''}">${tickets.length}</div>
+          <div class="sa-lbl">Open Tickets</div>
+          <div class="sa-sub">${patterns[0] ? `⚠ Pattern: ${patterns[0][0]}` : 'No open tickets'}</div>
+          <div class="sa-accent"></div>
+        </div>
+      </div>
+      <div class="sa-panel-wrap" id="sa-panel" style="display:none;"></div>
+    `;
+
+    window._sa = { aRows, reviews, tickets, patterns };
+    window._saActive = null;
+
+    window.saToggle = function(key) {
+      const panel = document.getElementById('sa-panel');
+      ['agencies','reviews','scores','tickets'].forEach(k => document.getElementById('sc-'+k)?.classList.remove('active'));
+      if (window._saActive === key) { panel.style.display='none'; panel.innerHTML=''; window._saActive=null; return; }
+      window._saActive = key;
+      document.getElementById('sc-'+key)?.classList.add('active');
+      panel.style.display = 'block';
+      panel.innerHTML = '<div class="sa-panel"><div class="sa-loading">Loading…</div></div>';
+      setTimeout(() => saPanel(key), 80);
+    };
+
+    window.saPanel = function(key) {
+      const { aRows, reviews, tickets, patterns } = window._sa;
+      const panel = document.getElementById('sa-panel');
+
+      if (key === 'agencies') {
+        const sorted = [...aRows].sort((a,b)=>(b.avg||0)-(a.avg||0));
+        panel.innerHTML = `<div class="sa-panel">
+          <div class="sa-panel-header"><h4>🏛️ Agency Health</h4>
+            <div class="sa-panel-search">🔍 <input type="text" placeholder="Search agency…" oninput="saSearch(this.value,'sa-alist')" /></div>
+          </div>
+          <div class="sa-panel-body" id="sa-alist">
+            ${sorted.map(a => {
+              const d = a.lastReview ? Math.floor((Date.now()-new Date(a.lastReview))/86400000) : null;
+              const h = !a.lastReview?'inactive':d<=14?'active':'stale';
+              const sc = a.avg==null?'var(--text-muted)':a.avg>=80?'#16a34a':a.avg>=65?'#d97706':'var(--danger)';
+              return `<div class="sa-row" data-n="${a.name.toLowerCase()}">
+                <div class="sa-dot ${h==='active'?'green':h==='stale'?'amber':'grey'}"></div>
+                <div style="flex:1;font-size:14px;font-weight:600;">${a.name}</div>
+                <div style="flex:2;font-size:12px;color:var(--text-muted);">${a.count} review${a.count!==1?'s':''} · Last: ${a.lastReview?dAgo(a.lastReview):'Never'}</div>
+                <span class="sa-health health-${h}">${h==='active'?'Active':h==='stale'?'Stale':'No Reviews'}</span>
+                <div style="font-size:15px;font-weight:700;min-width:44px;text-align:right;margin-right:16px;color:${sc};">${a.avg!=null?a.avg.toFixed(1):'—'}</div>
+                <a href="admin.html" style="font-size:12px;color:var(--primary);">View →</a>
+              </div>`;
+            }).join('') || '<div class="sa-loading">No agencies yet.</div>'}
+          </div>
+          <div class="sa-panel-footer"><a href="admin.html">Manage agencies →</a></div>
+        </div>`;
+      }
+
+      else if (key === 'reviews') {
+        const byA = {};
+        reviews.forEach(r => {
+          byA[r.agency_id] = byA[r.agency_id]||{count:0,pending:0,scores:[]};
+          byA[r.agency_id].count++;
+          if(r.status==='pending_approval') byA[r.agency_id].pending++;
+          if(r.overall_score) byA[r.agency_id].scores.push(r.overall_score);
+        });
+        const rows = aRows.map(a=>({...a,...(byA[a.id]||{count:0,pending:0,scores:[]})})).sort((a,b)=>b.count-a.count);
+        panel.innerHTML = `<div class="sa-panel">
+          <div class="sa-panel-header"><h4>📋 Reviews by Agency</h4>
+            <span style="font-size:13px;color:var(--text-muted);">${reviews.filter(r=>r.status==='pending_approval').length} pending platform-wide</span>
+          </div>
+          <div class="sa-panel-body">
+            <table class="atlas-table">
+              <thead><tr><th>Agency</th><th>Total</th><th>Pending</th><th>Avg Score</th><th>Last</th></tr></thead>
+              <tbody>${rows.map(a=>{
+                const avg = a.scores?.length ? a.scores.reduce((x,y)=>x+y,0)/a.scores.length : null;
+                const last = reviews.find(r=>r.agency_id===a.id);
+                return `<tr>
+                  <td style="font-weight:600;">${a.name}</td><td>${a.count}</td>
+                  <td>${a.pending>0?`<span class="badge badge-warning">${a.pending}</span>`:'—'}</td>
+                  <td style="font-weight:600;color:${avg==null?'var(--text-muted)':avg>=80?'#16a34a':avg>=65?'#d97706':'var(--danger)'}">${avg!=null?avg.toFixed(1):'—'}</td>
+                  <td style="color:var(--text-muted);font-size:13px;">${last?dAgo(last.created_at):'Never'}</td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table>
+          </div>
+          <div class="sa-panel-footer"><a href="reviews.html">View all reviews →</a></div>
+        </div>`;
+      }
+
+      else if (key === 'scores') {
+        const scored = [...aRows].filter(a=>a.avg!=null).sort((a,b)=>b.avg-a.avg);
+        const unscored = aRows.filter(a=>a.avg==null);
+        panel.innerHTML = `<div class="sa-panel">
+          <div class="sa-panel-header"><h4>📊 Score Rankings</h4>
+            <div class="sa-panel-search">🔍 <input type="text" placeholder="Search agency…" oninput="saSearch(this.value,'sa-slist')" /></div>
+          </div>
+          <div class="sa-panel-body" id="sa-slist">
+            ${[...scored,...unscored].map((a,i)=>{
+              const col=a.avg==null?'#e5e7eb':a.avg>=80?'#16a34a':a.avg>=65?'#d97706':'var(--danger)';
+              return `<div class="sa-row" data-n="${a.name.toLowerCase()}">
+                <div style="width:24px;font-size:12px;color:var(--text-muted);margin-right:12px;">${a.avg!=null?i+1:'—'}</div>
+                <div style="flex:1;">
+                  <div style="font-size:14px;font-weight:600;margin-bottom:5px;">${a.name}</div>
+                  <div style="background:#f3f4f6;border-radius:4px;height:6px;overflow:hidden;">
+                    <div style="width:${a.avg!=null?Math.round(a.avg):0}%;height:100%;background:${col};border-radius:4px;"></div>
+                  </div>
+                </div>
+                <div style="font-size:16px;font-weight:800;color:${col};min-width:52px;text-align:right;margin-left:16px;">${a.avg!=null?a.avg.toFixed(1):'—'}</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-left:12px;">${a.count} reviews</div>
+              </div>`;
+            }).join('') || '<div class="sa-loading">No score data yet.</div>'}
+          </div>
+          <div class="sa-panel-footer"><a href="reports.html">Full reports →</a></div>
+        </div>`;
+      }
+
+      else if (key === 'tickets') {
+        panel.innerHTML = `<div class="sa-panel">
+          <div class="sa-panel-header"><h4>🎫 Open Tickets</h4>
+            ${patterns[0]?`<span class="sa-pattern-tag">⚠ Pattern: ${patterns[0][0]} (${patterns[0][1]})</span>`:''}
+          </div>
+          <div class="sa-panel-body">
+            ${tickets.length===0 ? '<div class="sa-loading">No open tickets 🎉</div>' :
+              tickets.map(t=>{
+                const ag = aRows.find(a=>a.id===t.agency_id);
+                const rep = (patterns.find(([c])=>c===(t.category||'General'))||[])[1]>1;
+                return `<div class="sa-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+                  <div style="display:flex;width:100%;align-items:center;justify-content:space-between;">
+                    <div style="font-size:14px;font-weight:600;">${t.subject||'Untitled'}</div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      ${rep?'<span class="sa-pattern-tag">Repeat</span>':''}
+                    </div>
+                  </div>
+                  <div style="font-size:12px;color:var(--text-muted);">${ag?ag.name:'Unknown'} · ${t.category||'General'} · ${dAgo(t.created_at)}</div>
+                </div>`;
+              }).join('')}
+          </div>
+          <div class="sa-panel-footer"><a href="tickets.html">View all →</a></div>
+        </div>`;
+      }
+    };
+
+    window.saSearch = function(q, listId) {
+      document.querySelectorAll(`#${listId} .sa-row`).forEach(r => {
+        r.style.display = (r.dataset.n||'').includes(q.toLowerCase()) ? '' : 'none';
+      });
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // CHIEF
+  // ════════════════════════════════════════════════════════════
+  async function renderChief() {
+    document.getElementById('dash-subtitle').textContent = `${profile.agencies?.name||''} · Executive view`;
+    document.getElementById('dash-actions').innerHTML = `<span class="badge badge-muted">Read-only</span>`;
+
+    const [reviewsRes, officersRes, iaRes, pipRes, dtRes] = await Promise.all([
+      supabase.from('bwc_reviews').select('overall_score').eq('agency_id',agencyId).eq('status','approved'),
+      supabase.from('personnel_roster').select('id,first_name,last_name,badge_number,performance_score').eq('agency_id',agencyId).eq('officer_status','active'),
+      supabase.from('ia_cases').select('id',{count:'exact',head:true}).eq('agency_id',agencyId).eq('status','open'),
+      supabase.from('pips').select('id',{count:'exact',head:true}).eq('agency_id',agencyId).eq('status','active'),
+      supabase.from('delta_t_cases').select('id',{count:'exact',head:true}).eq('agency_id',agencyId).neq('status','closed'),
+    ]);
+
+    const scores = (reviewsRes.data||[]).map(r=>r.overall_score).filter(Boolean);
+    const avg = scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : null;
+    const THRESHOLD = 70;
+    const officers = officersRes.data||[];
+    const above = officers.filter(o=>o.performance_score>=THRESHOLD).length;
+    const below = officers.filter(o=>o.performance_score!=null&&o.performance_score<THRESHOLD).length;
+    const ranked = [...officers].filter(o=>o.performance_score!=null).sort((a,b)=>b.performance_score-a.performance_score);
+
+    document.getElementById('role-dashboard').innerHTML = `
+      <div class="stats-grid">
+        ${sCard('accent', '📊', avg!=null?avg.toFixed(1):'—', 'Agency Avg Score')}
+        ${sCard('info',    '👆', above, `At/Above ${THRESHOLD}`)}
+        ${sCard('danger',  '👇', below, `Below ${THRESHOLD}`, below>0)}
+        ${sCard('danger',  '🛡️', iaRes.count||0, 'Open IA Cases', iaRes.count>0)}
+        ${sCard('warning', '📋', pipRes.count||0, 'Active PIPs', pipRes.count>0)}
+        ${sCard('warning', '⏱️', dtRes.count||0, 'Active Delta T', dtRes.count>0)}
+      </div>
+      <div class="grid two-col" style="margin-top:0;">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Top 5 Performers</div></div>
+          ${rankTable(ranked.slice(0,5))}
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Bottom 5 Performers</div></div>
+          ${rankTable([...ranked].reverse().slice(0,5))}
+        </div>
+      </div>`;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // INTERNAL AFFAIRS
+  // ════════════════════════════════════════════════════════════
+  async function renderIA() {
+    document.getElementById('dash-subtitle').textContent = `${profile.agencies?.name||''} · IA case management`;
+    document.getElementById('dash-actions').innerHTML = `<a href="review-new.html" class="btn btn-primary">+ New Review</a>`;
+
+    const [casesRes, officersRes, reviewsRes] = await Promise.all([
+      supabase.from('ia_cases').select('id,case_number,subject_officer_id,status,created_at').eq('agency_id',agencyId).order('created_at',{ascending:false}).limit(20),
+      supabase.from('personnel_roster').select('id,first_name,last_name,badge_number').eq('agency_id',agencyId),
+      supabase.from('bwc_reviews').select('officer_id,follow_up_outcome').eq('agency_id',agencyId).eq('follow_up_outcome','internal_affairs'),
+    ]);
+
+    const oMap = {}; (officersRes.data||[]).forEach(o=>{oMap[o.id]=o;});
+    const refCounts = {}; (reviewsRes.data||[]).forEach(r=>{refCounts[r.officer_id]=(refCounts[r.officer_id]||0)+1;});
+    const multiRef = Object.entries(refCounts).filter(([,c])=>c>=2).map(([id,c])=>({o:oMap[id],c})).filter(x=>x.o);
+    const open = (casesRes.data||[]).filter(c=>c.status==='open');
+
+    document.getElementById('role-dashboard').innerHTML = `
+      <div class="stats-grid">
+        ${sCard('danger','🛡️',open.length,'Open IA Cases',open.length>0)}
+        ${sCard('warning','⚠️',multiRef.length,'Officers w/ 2+ Referrals',multiRef.length>0)}
+        ${sCard('info','✅',(casesRes.data||[]).filter(c=>c.status==='closed').length,'Closed Cases')}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Open IA Cases</div></div>
+        ${open.length===0?emptyState('No open IA cases'): `<div class="table-container"><table class="atlas-table">
+          <thead><tr><th>Case #</th><th>Subject Officer</th><th>Status</th><th>Opened</th></tr></thead>
+          <tbody>${open.map(c=>{const o=oMap[c.subject_officer_id];return `<tr onclick="location.href='ia-case-detail.html?id=${c.id}'">
+            <td class="col-mono">${c.case_number||'—'}</td>
+            <td>${o?`${o.last_name}, ${o.first_name}`:'Unknown'}</td>
+            <td><span class="badge badge-warning">Open</span></td>
+            <td style="color:var(--text-muted);font-size:13px;">${dAgo(c.created_at)}</td>
+          </tr>`;}).join('')}</tbody>
+        </table></div>`}
+      </div>
+      ${multiRef.length>0?`<div class="card" style="margin-top:16px;">
+        <div class="card-header"><div class="card-title">Officers with Multiple IA Referrals</div></div>
+        <div class="table-container"><table class="atlas-table">
+          <thead><tr><th>Officer</th><th>Badge</th><th>Referrals</th></tr></thead>
+          <tbody>${multiRef.sort((a,b)=>b.c-a.c).map(({o,c})=>`<tr>
+            <td>${o.last_name}, ${o.first_name}</td>
+            <td style="color:var(--text-muted);">${o.badge_number||'—'}</td>
+            <td><span class="badge badge-danger">${c}</span></td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>`:''}`;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // TRAINING BUREAU
+  // ════════════════════════════════════════════════════════════
+  async function renderTraining() {
+    document.getElementById('dash-subtitle').textContent = `${profile.agencies?.name||''} · Training & Delta T`;
+    document.getElementById('dash-actions').innerHTML = `
+      <a href="review-new.html" class="btn btn-primary" style="margin-right:8px;">+ New Review</a>
+      <a href="reports.html" class="btn btn-secondary">Reports</a>`;
+
+    const [dtRes, assignRes, officersRes] = await Promise.all([
+      supabase.from('delta_t_cases').select('id,officer_id,status,created_at,is_overdue_flagged').eq('agency_id',agencyId).order('created_at',{ascending:false}).limit(30),
+      supabase.from('training_assignments').select('id,completion_status').eq('agency_id',agencyId),
+      supabase.from('personnel_roster').select('id,first_name,last_name,badge_number').eq('agency_id',agencyId),
+    ]);
+
+    const oMap = {}; (officersRes.data||[]).forEach(o=>{oMap[o.id]=o;});
+    const open = (dtRes.data||[]).filter(c=>c.status==='open');
+    const flagged = (dtRes.data||[]).filter(c=>c.is_overdue_flagged);
+    const assignments = assignRes.data||[];
+    const completed = assignments.filter(a=>a.completion_status==='completed').length;
+    const overdue = assignments.filter(a=>a.completion_status==='overdue').length;
+    const pct = assignments.length ? Math.round(completed/assignments.length*100) : null;
+
+    document.getElementById('role-dashboard').innerHTML = `
+      <div class="stats-grid">
+        ${sCard('warning','⏱️',open.length,'Open Delta T Cases',open.length>0)}
+        ${sCard('danger','🚩',flagged.length,'Flagged 90+ Days',flagged.length>0)}
+        ${sCard(pct!=null&&pct<70?'danger':pct!=null&&pct<85?'warning':'accent','📚',pct!=null?pct+'%':'—','Training Compliance')}
+        ${sCard('danger','⏰',overdue,'Overdue Assignments',overdue>0)}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Open Delta T Cases</div><a href="delta-t.html" class="btn btn-ghost btn-sm">View All</a></div>
+        ${open.length===0?emptyState('No open Delta T cases'):`<div class="table-container"><table class="atlas-table">
+          <thead><tr><th>Officer</th><th>Status</th><th>Days Open</th><th>Opened</th></tr></thead>
+          <tbody>${open.map(c=>{
+            const o=oMap[c.officer_id];
+            const d=Math.floor((Date.now()-new Date(c.created_at))/86400000);
+            return `<tr onclick="location.href='delta-t.html?id=${c.id}'">
+              <td>${o?`${o.last_name}, ${o.first_name}`:'Unknown'}</td>
+              <td>${c.is_overdue_flagged?'<span class="badge badge-danger">⚠ Flagged</span>':'<span class="badge badge-warning">Open</span>'}</td>
+              <td style="font-weight:${d>=90?700:400};color:${d>=90?'var(--danger)':'inherit'}">${d}</td>
+              <td style="color:var(--text-muted);font-size:13px;">${dAgo(c.created_at)}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>`}
+      </div>`;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // AGENCY ADMIN
+  // ════════════════════════════════════════════════════════════
+  async function renderAgencyAdmin() {
+    document.getElementById('dash-subtitle').textContent = `${profile.agencies?.name||''} · Agency administration`;
+    document.getElementById('dash-actions').innerHTML = `<a href="review-new.html" class="btn btn-primary">+ New Review</a>`;
+
+    const [usersRes, officersRes, ranksRes, kpisRes] = await Promise.all([
+      supabase.from('profiles').select('id',{count:'exact',head:true}).eq('agency_id',agencyId),
+      supabase.from('personnel_roster').select('id',{count:'exact',head:true}).eq('agency_id',agencyId),
+      supabase.from('agency_ranks').select('id').eq('agency_id',agencyId).limit(1),
+      supabase.from('kpi_definitions').select('id').eq('agency_id',agencyId).eq('is_active',true).limit(1),
+    ]);
+
+    const checks = [
+      { label:'Ranks configured',          done:(ranksRes.data||[]).length>0,  link:'content-ranks.html' },
+      { label:'KPIs configured',           done:(kpisRes.data||[]).length>0,   link:'content-kpi.html' },
+      { label:'Officers added to roster',  done:(officersRes.count||0)>0,      link:'roster.html' },
+    ];
+
+    document.getElementById('role-dashboard').innerHTML = `
+      <div class="stats-grid">
+        ${sCard('info','👥',usersRes.count||0,'Platform Users')}
+        ${sCard('accent','🚔',officersRes.count||0,'Officers on Roster')}
+        ${sCard(checks.every(c=>c.done)?'accent':'warning','✅',`${checks.filter(c=>c.done).length}/${checks.length}`,'Setup Complete')}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Setup Checklist</div></div>
+        ${checks.map(c=>`<div style="display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border);">
+          <div style="width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;background:${c.done?'#d1fae5':'#fee2e2'};color:${c.done?'#065f46':'#991b1b'};">${c.done?'✓':'!'}</div>
+          <div style="flex:1;font-weight:500;">${c.label}</div>
+          ${!c.done?`<a href="${c.link}" style="font-size:13px;color:var(--primary);">Set up →</a>`:'<span style="font-size:12px;color:#16a34a;">Done</span>'}
+        </div>`).join('')}
+      </div>
+      <div class="card" style="margin-top:16px;">
+        <div class="card-header"><div class="card-title">Quick Links</div></div>
+        <div style="padding:16px 20px;display:flex;gap:12px;flex-wrap:wrap;">
+          <a href="roster.html" class="btn btn-secondary">Manage Roster</a>
+          <a href="content-kpi.html" class="btn btn-secondary">Edit KPIs</a>
+          <a href="access-requests.html" class="btn btn-secondary">Access Requests</a>
+        </div>
+      </div>`;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // SUPERVISOR
+  // ════════════════════════════════════════════════════════════
+  async function renderSupervisor() {
+    document.getElementById('dash-subtitle').textContent = `${profile.agencies?.name||''} · My team`;
+    document.getElementById('dash-actions').innerHTML = `<a href="review-new.html" class="btn btn-primary">+ New Review</a>`;
+
+    const [reviewsRes, officersRes, dtRes] = await Promise.all([
+      supabase.from('bwc_reviews').select('id,officer_id,incident_date,overall_score,status,created_at')
+        .eq('agency_id',agencyId).eq('reviewing_supervisor_id',profile.id)
+        .order('created_at',{ascending:false}).limit(10),
+      supabase.from('personnel_roster').select('id,first_name,last_name,badge_number,performance_score')
+        .eq('agency_id',agencyId).eq('officer_status','active').eq('supervisor_id',profile.id),
+      supabase.from('delta_t_cases').select('id,officer_id,status,created_at,is_overdue_flagged')
+        .eq('agency_id',agencyId).eq('supervisor_id',profile.id).neq('status','closed'),
+    ]);
+
+    const officers = officersRes.data||[];
+    const reviews  = reviewsRes.data||[];
+    const dtCases  = dtRes.data||[];
+    const oMap = {}; officers.forEach(o=>{oMap[o.id]=o;});
+
+    const scores = officers.map(o=>o.performance_score).filter(Boolean);
+    const avg = scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : null;
+    const flagged = dtCases.filter(c=>c.is_overdue_flagged);
+
+    document.getElementById('role-dashboard').innerHTML = `
+      <div class="stats-grid">
+        ${sCard('info','🚔',officers.length,'My Officers')}
+        ${sCard(avg==null?'info':avg>=80?'accent':avg>=65?'warning':'danger','📊',avg!=null?avg.toFixed(1):'—','Roster Avg Score')}
+        ${sCard('warning','⏱️',dtCases.length,'My Open Delta T',dtCases.length>0)}
+        ${sCard('danger','🚩',flagged.length,'Flagged Cases',flagged.length>0)}
+      </div>
+      <div class="grid two-col" style="margin-top:0;">
+        <div class="card">
+          <div class="card-header"><div class="card-title">My Recent Reviews</div><a href="reviews.html" class="btn btn-ghost btn-sm">View All</a></div>
+          ${reviews.length===0?emptyState('No reviews yet'):`<div class="table-container"><table class="atlas-table">
+            <thead><tr><th>Officer</th><th>Date</th><th>Score</th><th>Status</th></tr></thead>
+            <tbody>${reviews.map(r=>{
+              const o=oMap[r.officer_id];
+              return `<tr onclick="location.href='review-detail.html?id=${r.id}'">
+                <td>${o?`${o.last_name}, ${o.first_name}`:'Unknown'}</td>
+                <td style="color:var(--text-muted);font-size:13px;">${r.incident_date?fmtDate(r.incident_date):dAgo(r.created_at)}</td>
+                <td style="font-weight:600;color:${r.overall_score==null?'var(--text-muted)':r.overall_score>=80?'#16a34a':r.overall_score>=65?'#d97706':'var(--danger)'}">${r.overall_score!=null?r.overall_score.toFixed(1):'—'}</td>
+                <td>${statusBadge(r.status)}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>`}
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">My Open Delta T Cases</div><a href="delta-t.html" class="btn btn-ghost btn-sm">View All</a></div>
+          ${dtCases.length===0?emptyState('No open cases'):`<div class="table-container"><table class="atlas-table">
+            <thead><tr><th>Officer</th><th>Days Open</th><th>Status</th></tr></thead>
+            <tbody>${dtCases.map(c=>{
+              const o=oMap[c.officer_id];
+              const d=Math.floor((Date.now()-new Date(c.created_at))/86400000);
+              return `<tr onclick="location.href='delta-t.html?id=${c.id}'">
+                <td>${o?`${o.last_name}, ${o.first_name}`:'Unknown'}</td>
+                <td style="font-weight:${d>=90?700:400};color:${d>=90?'var(--danger)':'inherit'}">${d}</td>
+                <td>${c.is_overdue_flagged?'<span class="badge badge-danger">⚠ Flagged</span>':'<span class="badge badge-warning">Open</span>'}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>`}
+        </div>
+      </div>`;
+  }
+
+  // ── Shared helpers ──────────────────────────────────────────
+  function sCard(type, icon, val, label, pulse=false) {
+    return `<div class="stat-card ${type}">
+      <div class="stat-icon ${type}">${icon}</div>
+      <div class="stat-value ${pulse?'animate-pulse':''}">${val}</div>
+      <div class="stat-label">${label}</div>
+    </div>`;
+  }
+
+  function rankTable(officers) {
+    if (!officers.length) return emptyState('No scored officers yet');
+    return `<div class="table-container"><table class="atlas-table">
+      <thead><tr><th>#</th><th>Officer</th><th>Score</th></tr></thead>
+      <tbody>${officers.map((o,i)=>`<tr>
+        <td style="color:var(--text-muted);">${i+1}</td>
+        <td>${o.last_name}, ${o.first_name}<br><span style="font-size:11px;color:var(--text-muted);">Badge ${o.badge_number||'—'}</span></td>
+        <td style="font-weight:700;color:${o.performance_score>=80?'#16a34a':o.performance_score>=65?'#d97706':'var(--danger)'}">${o.performance_score.toFixed(1)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+
+  function emptyState(msg) {
+    return `<div class="empty-state"><div class="empty-title">${msg}</div></div>`;
+  }
+
+  function dAgo(ts) {
+    if (!ts) return '—';
+    const d = Math.floor((Date.now()-new Date(ts))/86400000);
+    return d===0?'Today':d===1?'Yesterday':`${d}d ago`;
+  }
+
+  function fmtDate(s) {
+    return new Date(s+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  }
+
+  function statusBadge(s) {
+    const map = { draft:'badge-draft', pending_approval:'badge-pending', approved:'badge-approved', rejected:'badge-rejected' };
+    return `<span class="badge ${map[s]||'badge-muted'}">${s?s.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase()):'—'}</span>`;
+  }
+
+</script>
+</body>
+</html>

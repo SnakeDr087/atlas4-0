@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Admin</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .step-indicator {
+      display: flex; align-items: center; gap: 0;
+      margin-bottom: 24px;
+    }
+    .step {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600;
+      color: var(--text-muted);
+    }
+    .step.active { color: var(--accent); }
+    .step.done   { color: var(--success); }
+    .step-num {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--bg-overlay); border: 1.5px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; flex-shrink: 0;
+    }
+    .step.active .step-num { background: var(--accent); border-color: var(--accent); color: white; }
+    .step.done   .step-num { background: var(--success); border-color: var(--success); color: white; }
+    .step-line { flex: 1; height: 1px; background: var(--border); margin: 0 8px; }
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
+    .agency-card {
+      border: 1px solid var(--border); border-radius: var(--border-radius-lg);
+      padding: 16px 20px; margin-bottom: 10px;
+      transition: box-shadow var(--transition);
+      background: var(--bg-surface);
+    }
+    .agency-card:hover { box-shadow: var(--shadow-md); }
+    .agency-name { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+    .agency-meta { display: flex; gap: 20px; flex-wrap: wrap; }
+    .agency-meta-item { font-size: 12px; color: var(--text-secondary); }
+    .agency-meta-item strong { color: var(--text-primary); }
+    .contact-block {
+      background: var(--bg-elevated); border-radius: var(--border-radius);
+      padding: 12px 14px; margin-top: 10px;
+    }
+    .contact-row { display: flex; gap: 20px; flex-wrap: wrap; }
+    .contact-item { font-size: 12px; color: var(--text-secondary); }
+    .contact-label { font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 2px; }
+    .sql-box {
+      background: var(--bg-base); border: 1px solid var(--border);
+      border-radius: var(--border-radius); padding: 14px;
+      font-family: var(--font-mono); font-size: 12px;
+      color: var(--text-secondary); line-height: 1.6;
+      white-space: pre; overflow-x: auto; max-height: 300px;
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Admin Panel</h1>
+          <p id="admin-sub">Platform administration</p>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="agencies">Agencies</button>
+        <button class="tab-btn" data-tab="users">Portal Users</button>
+      </div>
+
+      <!-- ── AGENCIES TAB ──────────────────────────────── -->
+      <div class="tab-panel active" id="tab-agencies">
+        <div class="flex items-center justify-between mb-4">
+          <div id="agency-count" style="font-size:13px;color:var(--text-secondary);"></div>
+          <button class="btn btn-primary" id="add-agency-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            Add Agency
+          </button>
+        </div>
+        <div id="agencies-loading" style="display:flex;justify-content:center;padding:48px;">
+          <div class="spinner"></div>
+        </div>
+        <div id="agencies-list" style="display:none;"></div>
+      </div>
+
+      <!-- ── USERS TAB ─────────────────────────────────── -->
+      <div class="tab-panel" id="tab-users">
+        <div class="flex items-center justify-between mb-4">
+          <div style="font-size:13px;color:var(--text-secondary);" id="users-count"></div>
+          <button class="btn btn-primary" id="add-user-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            Add Portal User
+          </button>
+        </div>
+        <div class="card">
+          <div class="search-input-wrap" style="max-width:280px;margin-bottom:16px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="user-search" placeholder="Search users…">
+          </div>
+          <div id="users-loading" style="display:flex;justify-content:center;padding:32px;"><div class="spinner"></div></div>
+          <div id="users-content" style="display:none;">
+            <div class="table-container">
+              <table class="atlas-table">
+                <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Agency</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="users-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     ADD AGENCY — Multi-step modal
+══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="agency-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="agency-modal-title">Add Agency</div>
+      <button class="modal-close" onclick="closeAgencyModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Step indicator -->
+      <div class="step-indicator">
+        <div class="step active" id="step-ind-1">
+          <div class="step-num">1</div>Agency Details
+        </div>
+        <div class="step-line"></div>
+        <div class="step" id="step-ind-2">
+          <div class="step-num">2</div>Agency Head
+        </div>
+        <div class="step-line"></div>
+        <div class="step" id="step-ind-3">
+          <div class="step-num">3</div>Liaison
+        </div>
+        <div class="step-line"></div>
+        <div class="step" id="step-ind-4">
+          <div class="step-num">4</div>Review
+        </div>
+      </div>
+
+      <!-- Step 1: Agency Details -->
+      <div class="step-panel active" id="step-1">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Agency Name <span class="required">*</span></label>
+            <input type="text" id="ag-name" placeholder="Anytown Police Department">
+          </div>
+          <div class="form-group">
+            <label>Agency Size <span style="font-size:11px;color:var(--text-muted);">sworn officers</span></label>
+            <input type="number" id="ag-size" min="1" placeholder="e.g. 85">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Street Address</label>
+          <input type="text" id="ag-address" placeholder="1 Police Plaza">
+        </div>
+        <div class="form-row three">
+          <div class="form-group">
+            <label>City</label>
+            <input type="text" id="ag-city">
+          </div>
+          <div class="form-group">
+            <label>State <span class="required">*</span></label>
+            <select id="ag-state">
+              <option value="">—</option>
+              <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+              <option>CA</option><option>CO</option><option>CT</option><option>DE</option>
+              <option>FL</option><option>GA</option><option>HI</option><option>ID</option>
+              <option>IL</option><option>IN</option><option>IA</option><option>KS</option>
+              <option>KY</option><option>LA</option><option>ME</option><option>MD</option>
+              <option>MA</option><option>MI</option><option>MN</option><option>MS</option>
+              <option>MO</option><option>MT</option><option>NE</option><option>NV</option>
+              <option>NH</option><option>NJ</option><option>NM</option><option>NY</option>
+              <option>NC</option><option>ND</option><option>OH</option><option>OK</option>
+              <option>OR</option><option>PA</option><option>RI</option><option>SC</option>
+              <option>SD</option><option>TN</option><option>TX</option><option>UT</option>
+              <option>VT</option><option>VA</option><option>WA</option><option>WV</option>
+              <option>WI</option><option>WY</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>ZIP</label>
+            <input type="text" id="ag-zip" maxlength="10">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Phone</label>
+            <input type="tel" id="ag-phone" placeholder="(555) 555-5555">
+          </div>
+          <div class="form-group">
+            <label>Website</label>
+            <input type="url" id="ag-website" placeholder="https://anytown-pd.gov">
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Agency Head (Chief) -->
+      <div class="step-panel" id="step-2">
+        <div class="alert alert-info" style="margin-bottom:16px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span class="alert-message">The Agency Head (Chief, Commissioner, Director) is the executive who owns the ATLAS contract. They receive IA case notifications.</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Title</label>
+            <input type="text" id="chief-title" placeholder="Chief of Police">
+          </div>
+          <div class="form-group">
+            <label>Full Name <span class="required">*</span></label>
+            <input type="text" id="chief-name" placeholder="John Smith">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Email <span class="required">*</span>
+              <span style="font-size:11px;color:var(--text-muted);">— used for portal access + notifications</span>
+            </label>
+            <input type="email" id="chief-email" placeholder="chief@anytown-pd.gov">
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input type="tel" id="chief-phone" placeholder="(555) 555-5555">
+          </div>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="chief-portal-access" style="width:auto;" checked>
+            <span>Create ATLAS portal account for this person (role: Chief)</span>
+          </label>
+          <div class="form-hint">They will receive an email with setup instructions to access ATLAS.</div>
+        </div>
+      </div>
+
+      <!-- Step 3: Liaison (Agency Admin) -->
+      <div class="step-panel" id="step-3">
+        <div class="alert alert-info" style="margin-bottom:16px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span class="alert-message">The Liaison is your day-to-day contact at the agency. They manage ATLAS setup — ranks, KPIs, roster, and user access. This is the Agency Admin role.</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Title</label>
+            <input type="text" id="liaison-title" placeholder="Captain, Lieutenant, etc.">
+          </div>
+          <div class="form-group">
+            <label>Full Name <span class="required">*</span></label>
+            <input type="text" id="liaison-name" placeholder="Jane Doe">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Email <span class="required">*</span>
+              <span style="font-size:11px;color:var(--text-muted);">— used for portal access</span>
+            </label>
+            <input type="email" id="liaison-email" placeholder="liaison@anytown-pd.gov">
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input type="tel" id="liaison-phone" placeholder="(555) 555-5555">
+          </div>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="liaison-portal-access" style="width:auto;" checked>
+            <span>Create ATLAS portal account for this person (role: Agency Admin)</span>
+          </label>
+          <div class="form-hint">They will receive an email with setup instructions to access ATLAS.</div>
+        </div>
+      </div>
+
+      <!-- Step 4: Review + SQL -->
+      <div class="step-panel" id="step-4">
+        <div id="review-content"></div>
+        <div style="margin-top:16px;" id="sql-section">
+          <div class="flex items-center justify-between" style="margin-bottom:8px;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Portal Account Setup SQL</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">
+                Run this in the Supabase SQL Editor after saving the agency to create portal accounts.
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="copySql()">Copy SQL</button>
+          </div>
+          <div class="sql-box" id="sql-output"></div>
+        </div>
+      </div>
+
+    </div><!-- /modal-body -->
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modal-back-btn" style="display:none;" onclick="agencyStepBack()">← Back</button>
+      <div style="flex:1;"></div>
+      <button class="btn btn-ghost" onclick="closeAgencyModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-next-btn" onclick="agencyStepNext()">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD USER MODAL -->
+<div class="modal-overlay" id="user-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Add Portal User</div>
+      <button class="modal-close" onclick="document.getElementById('user-modal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Full Name <span class="required">*</span></label>
+        <input type="text" id="u-name">
+      </div>
+      <div class="form-group">
+        <label>Email <span class="required">*</span></label>
+        <input type="email" id="u-email">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Role <span class="required">*</span></label>
+          <select id="u-role">
+            <option value="">— Select role —</option>
+            <option value="chief">Chief / Executive</option>
+            <option value="internal_affairs">Internal Affairs</option>
+            <option value="training_bureau">Training Bureau</option>
+            <option value="agency_admin">Agency Admin (Liaison)</option>
+            <option value="supervisor">Supervisor</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Agency <span class="required">*</span></label>
+          <select id="u-agency"></select>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="alert alert-info" style="margin:0;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/></svg>
+        <span class="alert-message">Copy the SQL below and run it in Supabase to create this account.</span>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="flex items-center justify-between" style="margin-bottom:6px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);">Setup SQL</div>
+          <button class="btn btn-ghost btn-sm" onclick="copyUserSql()">Copy</button>
+        </div>
+        <div class="sql-box" id="user-sql-output" style="min-height:60px;"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('user-modal').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script src="error-handler.js"></script>
+<script type="module">
+  import { initAuth, ROLE_LABELS } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin', 'agency_admin']
+  });
+  renderNav(profile, 'admin');
+  renderTopbar('Admin Panel');
+
+  const isSuperAdmin = profile.role === 'super_admin';
+  document.getElementById('admin-sub').textContent =
+    isSuperAdmin ? 'All agencies · Platform administration' : profile.agencies?.name || '';
+
+  // Tab switching
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+    });
+  });
+
+  // ── AGENCIES ───────────────────────────────────────────
+  async function loadAgencies() {
+    const { data: agencies } = await supabase
+      .from('agencies')
+      .select('*')
+      .order('name');
+
+    document.getElementById('agencies-loading').style.display = 'none';
+    document.getElementById('agencies-list').style.display = 'block';
+    document.getElementById('agency-count').textContent =
+      `${(agencies || []).length} agenc${agencies?.length === 1 ? 'y' : 'ies'}`;
+
+    if (!agencies?.length) {
+      document.getElementById('agencies-list').innerHTML =
+        '<div class="empty-state"><div class="empty-title">No agencies yet</div><div class="empty-text">Add your first agency to get started.</div></div>';
+      return;
+    }
+
+    document.getElementById('agencies-list').innerHTML = agencies.map(a => `
+      <div class="agency-card">
+        <div class="flex items-center justify-between">
+          <div class="agency-name">${escHtml(a.name)}</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span class="badge ${a.is_active ? 'badge-success' : 'badge-muted'}">${a.is_active ? 'Active' : 'Inactive'}</span>
+            <a href="agency-settings.html?id=${a.id}" class="btn btn-ghost btn-sm">Settings</a>
+            <button class="btn btn-ghost btn-sm" onclick="toggleAgency('${a.id}', ${a.is_active})">
+              ${a.is_active ? 'Deactivate' : 'Activate'}
+            </button>
+          </div>
+        </div>
+        <div class="agency-meta" style="margin-top:6px;">
+          ${a.city ? `<div class="agency-meta-item">${escHtml(a.city)}, ${a.state}${a.zip ? ' ' + a.zip : ''}</div>` : `<div class="agency-meta-item">${a.state || '—'}</div>`}
+          ${a.agency_size ? `<div class="agency-meta-item"><strong>${a.agency_size}</strong> sworn officers</div>` : ''}
+          ${a.phone ? `<div class="agency-meta-item">${escHtml(a.phone)}</div>` : ''}
+        </div>
+        <div class="contact-block">
+          <div class="contact-row">
+            <div class="contact-item">
+              <div class="contact-label">Agency Head</div>
+              <div>${a.agency_head_name ? escHtml(a.agency_head_name) : '<span style="color:var(--text-muted)">Not set</span>'}</div>
+              ${a.agency_head_email ? `<div style="color:var(--accent);font-size:11px;">${escHtml(a.agency_head_email)}</div>` : ''}
+              ${a.agency_head_phone ? `<div style="font-size:11px;">${escHtml(a.agency_head_phone)}</div>` : ''}
+            </div>
+            <div class="contact-item">
+              <div class="contact-label">Liaison (Agency Admin)</div>
+              <div>${a.liaison_name ? escHtml(a.liaison_name) : '<span style="color:var(--text-muted)">Not set</span>'}</div>
+              ${a.liaison_email ? `<div style="color:var(--accent);font-size:11px;">${escHtml(a.liaison_email)}</div>` : ''}
+              ${a.liaison_phone ? `<div style="font-size:11px;">${escHtml(a.liaison_phone)}</div>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  window.toggleAgency = async function(id, isActive) {
+    await supabase.from('agencies').update({ is_active: !isActive }).eq('id', id);
+    showToast('success', isActive ? 'Agency deactivated' : 'Agency activated');
+    await loadAgencies();
+  };
+
+  // ── MULTI-STEP AGENCY CREATION ─────────────────────────
+  let currentStep = 1;
+  const totalSteps = 4;
+  let createdAgencyId = null;
+
+  document.getElementById('add-agency-btn').addEventListener('click', () => {
+    currentStep = 1;
+    createdAgencyId = null;
+    renderStep(1);
+    document.getElementById('agency-modal').classList.add('open');
+  });
+
+  function renderStep(step) {
+    for (let i = 1; i <= totalSteps; i++) {
+      const panel = document.getElementById(`step-${i}`);
+      const ind   = document.getElementById(`step-ind-${i}`);
+      panel.classList.toggle('active', i === step);
+      ind.className = `step ${i === step ? 'active' : i < step ? 'done' : ''}`;
+    }
+    document.getElementById('modal-back-btn').style.display = step > 1 ? '' : 'none';
+    const nextBtn = document.getElementById('modal-next-btn');
+    if (step === 3) {
+      nextBtn.textContent = 'Review →';
+    } else if (step === 4) {
+      nextBtn.textContent = 'Save Agency';
+    } else {
+      nextBtn.textContent = 'Next →';
+    }
+    if (step === 4) buildReview();
+  }
+
+  window.agencyStepNext = async function() {
+    if (currentStep === 1) {
+      const name  = document.getElementById('ag-name').value.trim();
+      const state = document.getElementById('ag-state').value;
+      if (!name || !state) { showToast('error', 'Required', 'Agency name and state are required.'); return; }
+      currentStep = 2;
+      renderStep(2);
+    } else if (currentStep === 2) {
+      const name  = document.getElementById('chief-name').value.trim();
+      const email = document.getElementById('chief-email').value.trim();
+      if (!name || !email) { showToast('error', 'Required', 'Chief name and email are required.'); return; }
+      currentStep = 3;
+      renderStep(3);
+    } else if (currentStep === 3) {
+      const name  = document.getElementById('liaison-name').value.trim();
+      const email = document.getElementById('liaison-email').value.trim();
+      if (!name || !email) { showToast('error', 'Required', 'Liaison name and email are required.'); return; }
+      currentStep = 4;
+      renderStep(4);
+    } else if (currentStep === 4) {
+      await saveAgency();
+    }
+  };
+
+  window.agencyStepBack = function() {
+    if (currentStep > 1) { currentStep--; renderStep(currentStep); }
+  };
+
+  function buildReview() {
+    const name        = document.getElementById('ag-name').value.trim();
+    const state       = document.getElementById('ag-state').value;
+    const city        = document.getElementById('ag-city').value.trim();
+    const zip         = document.getElementById('ag-zip').value.trim();
+    const size        = document.getElementById('ag-size').value;
+    const chiefName   = document.getElementById('chief-name').value.trim();
+    const chiefTitle  = document.getElementById('chief-title').value.trim();
+    const chiefEmail  = document.getElementById('chief-email').value.trim();
+    const chiefPhone  = document.getElementById('chief-phone').value.trim();
+    const liaisonName = document.getElementById('liaison-name').value.trim();
+    const liaisonTitle= document.getElementById('liaison-title').value.trim();
+    const liaisonEmail= document.getElementById('liaison-email').value.trim();
+    const liaisonPhone= document.getElementById('liaison-phone').value.trim();
+
+    document.getElementById('review-content').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div>
+          <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Agency</div>
+          <div style="font-weight:700;font-size:15px;">${escHtml(name)}</div>
+          <div style="font-size:13px;color:var(--text-secondary);">${[city, state, zip].filter(Boolean).join(', ')}</div>
+          ${size ? `<div style="font-size:12px;color:var(--text-muted);">${size} sworn officers</div>` : ''}
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Agency Head</div>
+          <div style="font-weight:600;">${escHtml(chiefTitle ? chiefTitle + ' ' + chiefName : chiefName)}</div>
+          <div style="font-size:12px;color:var(--accent);">${escHtml(chiefEmail)}</div>
+          ${chiefPhone ? `<div style="font-size:12px;color:var(--text-muted);">${escHtml(chiefPhone)}</div>` : ''}
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Liaison (Agency Admin)</div>
+          <div style="font-weight:600;">${escHtml(liaisonTitle ? liaisonTitle + ' ' + liaisonName : liaisonName)}</div>
+          <div style="font-size:12px;color:var(--accent);">${escHtml(liaisonEmail)}</div>
+          ${liaisonPhone ? `<div style="font-size:12px;color:var(--text-muted);">${escHtml(liaisonPhone)}</div>` : ''}
+        </div>
+      </div>`;
+
+    // Generate SQL
+    const sql = `-- Run in Supabase SQL Editor after saving agency
+-- Replace AGENCY_ID_HERE with the ID from the agency record
+
+-- 1. Create Chief portal account
+-- a) Go to Supabase → Authentication → Users → Add User
+--    Email: ${chiefEmail}
+--    Password: (temporary, they will reset)
+--    Auto Confirm: ON
+-- b) Copy the User UID, then run:
+
+INSERT INTO profiles (id, agency_id, email, full_name, role, is_active)
+VALUES (
+  'CHIEF_USER_UID_HERE',
+  'AGENCY_ID_HERE',
+  '${chiefEmail}',
+  '${chiefName}',
+  'chief',
+  true
+);
+
+-- 2. Create Liaison portal account
+-- a) Go to Supabase → Authentication → Users → Add User
+--    Email: ${liaisonEmail}
+--    Password: (temporary, they will reset)
+--    Auto Confirm: ON
+-- b) Copy the User UID, then run:
+
+INSERT INTO profiles (id, agency_id, email, full_name, role, is_active)
+VALUES (
+  'LIAISON_USER_UID_HERE',
+  'AGENCY_ID_HERE',
+  '${liaisonEmail}',
+  '${liaisonName}',
+  'agency_admin',
+  true
+);`;
+
+    document.getElementById('sql-output').textContent = sql;
+  }
+
+  window.copySql = function() {
+    const sql = document.getElementById('sql-output').textContent;
+    navigator.clipboard.writeText(sql).then(() => showToast('success', 'SQL copied to clipboard'));
+  };
+
+  async function saveAgency() {
+    const btn = document.getElementById('modal-next-btn');
+    btn.classList.add('btn-loading'); btn.disabled = true;
+
+    const { data: agency, error } = await supabase
+      .from('agencies')
+      .insert({
+        name:                document.getElementById('ag-name').value.trim(),
+        state:               document.getElementById('ag-state').value,
+        city:                document.getElementById('ag-city').value.trim() || null,
+        zip:                 document.getElementById('ag-zip').value.trim() || null,
+        address:             document.getElementById('ag-address')?.value.trim() || null,
+        phone:               document.getElementById('ag-phone').value.trim() || null,
+        website:             document.getElementById('ag-website').value.trim() || null,
+        agency_size:         parseInt(document.getElementById('ag-size').value) || null,
+        agency_head_title:   document.getElementById('chief-title').value.trim() || null,
+        agency_head_name:    document.getElementById('chief-name').value.trim() || null,
+        agency_head_email:   document.getElementById('chief-email').value.trim() || null,
+        agency_head_phone:   document.getElementById('chief-phone').value.trim() || null,
+        liaison_name:        document.getElementById('liaison-name').value.trim() || null,
+        liaison_email:       document.getElementById('liaison-email').value.trim() || null,
+        liaison_phone:       document.getElementById('liaison-phone').value.trim() || null,
+        is_active:           true
+      })
+      .select('id')
+      .single();
+
+    btn.classList.remove('btn-loading'); btn.disabled = false;
+
+    if (error) { showToast('error', 'Failed to save', error.message); return; }
+
+    createdAgencyId = agency.id;
+
+    // Update SQL with real agency ID
+    const sqlEl = document.getElementById('sql-output');
+    sqlEl.textContent = sqlEl.textContent.replace(/AGENCY_ID_HERE/g, agency.id);
+
+    showToast('success', 'Agency saved', 'Copy the SQL above to create portal accounts.');
+    document.getElementById('modal-next-btn').textContent = 'Done';
+    document.getElementById('modal-next-btn').onclick = () => {
+      closeAgencyModal();
+      loadAgencies();
+    };
+    await loadAgencies();
+  }
+
+  window.closeAgencyModal = function() {
+    document.getElementById('agency-modal').classList.remove('open');
+    currentStep = 1;
+    // Clear form
+    ['ag-name','ag-size','ag-address','ag-city','ag-zip','ag-phone','ag-website',
+     'chief-title','chief-name','chief-email','chief-phone',
+     'liaison-title','liaison-name','liaison-email','liaison-phone'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    document.getElementById('ag-state').value = '';
+    document.getElementById('modal-next-btn').onclick = agencyStepNext;
+  };
+
+  // ── USERS ──────────────────────────────────────────────
+  async function loadUsers(search = '') {
+    let q = supabase
+      .from('profiles')
+      .select('id, full_name, email, role, is_active, agencies(name)')
+      .order('full_name');
+    if (!isSuperAdmin) q = q.eq('agency_id', profile.agency_id);
+    if (search) q = q.ilike('full_name', `%${search}%`);
+    const { data: users } = await q;
+
+    document.getElementById('users-loading').style.display = 'none';
+    document.getElementById('users-content').style.display = 'block';
+    document.getElementById('users-count').textContent =
+      `${(users || []).length} portal user${users?.length !== 1 ? 's' : ''}`;
+
+    const tbody = document.getElementById('users-tbody');
+    tbody.innerHTML = (users || []).map(u => `
+      <tr>
+        <td class="col-primary">${escHtml(u.full_name)}</td>
+        <td style="font-size:12px;">${escHtml(u.email)}</td>
+        <td><span class="badge badge-muted">${ROLE_LABELS[u.role] || u.role}</span></td>
+        <td style="font-size:12px;color:var(--text-muted);">${u.agencies?.name || '—'}</td>
+        <td><span class="badge ${u.is_active ? 'badge-success' : 'badge-muted'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="toggleUser('${u.id}', ${u.is_active})">
+            ${u.is_active ? 'Deactivate' : 'Activate'}
+          </button>
+        </td>
+      </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No users.</td></tr>';
+  }
+
+  window.toggleUser = async function(id, isActive) {
+    await supabase.from('profiles').update({ is_active: !isActive }).eq('id', id);
+    showToast('success', isActive ? 'User deactivated' : 'User reactivated');
+    await loadUsers();
+  };
+
+  // Add user modal
+  document.getElementById('add-user-btn').addEventListener('click', async () => {
+    // Load agencies for dropdown
+    const { data: agencies } = await supabase
+      .from('agencies').select('id, name').eq('is_active', true).order('name');
+    const sel = document.getElementById('u-agency');
+    sel.innerHTML = '<option value="">— Select agency —</option>';
+    (agencies || []).forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id; opt.textContent = a.name;
+      sel.appendChild(opt);
+    });
+    document.getElementById('user-modal').classList.add('open');
+    updateUserSql();
+  });
+
+  function updateUserSql() {
+    const name   = document.getElementById('u-name')?.value.trim() || 'Full Name';
+    const email  = document.getElementById('u-email')?.value.trim() || 'email@agency.gov';
+    const role   = document.getElementById('u-role')?.value || 'supervisor';
+    const agency = document.getElementById('u-agency')?.value || 'AGENCY_ID_HERE';
+    document.getElementById('user-sql-output').textContent =
+`-- 1. Go to Supabase → Auth → Users → Add User
+--    Email: ${email}  Auto Confirm: ON
+-- 2. Copy the new User UID, replace below, then run:
+
+INSERT INTO profiles (id, agency_id, email, full_name, role, is_active)
+VALUES (
+  'USER_UID_HERE',
+  '${agency}',
+  '${email}',
+  '${name}',
+  '${role}',
+  true
+);`;
+  }
+
+  ['u-name','u-email','u-role','u-agency'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', updateUserSql);
+    document.getElementById(id)?.addEventListener('change', updateUserSql);
+  });
+
+  window.copyUserSql = function() {
+    navigator.clipboard.writeText(document.getElementById('user-sql-output').textContent)
+      .then(() => showToast('success', 'SQL copied'));
+  };
+
+  let userDebounce;
+  document.getElementById('user-search').addEventListener('input', e => {
+    clearTimeout(userDebounce);
+    userDebounce = setTimeout(() => loadUsers(e.target.value.trim()), 300);
+  });
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(type, title, body = '') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body ? `<div class="toast-body">${body}</div>` : ''}</div>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 4500);
+  }
+
+  await Promise.all([loadAgencies(), loadUsers()]);
+</script>
+</body>
+</html>

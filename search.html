@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Search</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="print.css" media="print">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <!-- Print header (screen-hidden, print-visible) -->
+      <div class="print-header">
+        <div class="print-logo">ATL<span>A</span>S</div>
+        <div class="print-meta">Officer Search Results<br><span id="print-date"></span></div>
+      </div>
+
+      <div class="page-header">
+        <h1>Search</h1>
+        <p>Filter officers by experience, incident type, outcome, and date range.</p>
+      </div>
+
+      <!-- Filter panel -->
+      <div class="card mb-4" data-no-print>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div class="form-group" style="margin:0;">
+            <label>Officer Name / Badge #</label>
+            <input type="text" id="f-name" placeholder="Last name, first name, or badge #">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Years of Experience</label>
+            <select id="f-experience">
+              <option value="">All</option>
+              <option value="0-5">0–5 years</option>
+              <option value="6-10">6–10 years</option>
+              <option value="11-15">11–15 years</option>
+              <option value="16+">16+ years</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Incident Type</label>
+            <select id="f-incident-type">
+              <option value="">All Incident Types</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:16px;align-items:end;">
+          <div class="form-group" style="margin:0;">
+            <label>Follow-Up Outcome</label>
+            <select id="f-outcome">
+              <option value="">All Outcomes</option>
+              <option value="no_action">No Action</option>
+              <option value="commendation">Commendation</option>
+              <option value="coaching">Coaching</option>
+              <option value="training">Training</option>
+              <option value="internal_affairs">IA Referral</option>
+              <option value="pip">PIP</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Incident Date From</label>
+            <input type="date" id="f-date-from">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Incident Date To</label>
+            <input type="date" id="f-date-to">
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" id="run-search-btn">Search</button>
+            <button class="btn btn-ghost" id="clear-btn">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="results-section" style="display:none;" class="animate-fade-in">
+
+        <div class="flex items-center justify-between mb-4" data-no-print>
+          <div id="results-summary" style="font-size:13px;color:var(--text-secondary);"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary btn-sm" id="export-csv-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              Export CSV
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="window.print()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="6,9 6,2 18,2 18,9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Print / PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- Officer results grid -->
+        <div id="officer-results"></div>
+
+        <!-- Review breakdown table -->
+        <div class="card" id="review-results-card" style="margin-top:16px;display:none;">
+          <div class="card-header">
+            <div class="card-title">Matching Reviews</div>
+            <div class="card-subtitle" id="review-count-label"></div>
+          </div>
+          <div class="table-container">
+            <table class="atlas-table">
+              <thead>
+                <tr>
+                  <th>Case #</th><th>Officer</th><th>Incident Type</th>
+                  <th>Incident Date</th><th>Follow-Up</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="review-results-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Outcome distribution -->
+        <div class="card" style="margin-top:16px;" id="outcome-dist-card">
+          <div class="card-title" style="margin-bottom:16px;">Outcome Distribution — Filtered Set</div>
+          <div id="outcome-dist-content"></div>
+        </div>
+
+      </div>
+
+      <div id="idle-state" style="text-align:center;padding:60px 0;color:var(--text-muted);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+             style="width:48px;height:48px;margin:0 auto 16px;opacity:0.3;">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <div style="font-size:14px;">Configure filters and run a search</div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({ requireAuth: true });
+  renderNav(profile, 'search');
+  renderTopbar('Search');
+
+  document.getElementById('print-date').textContent =
+    new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  // Load incident types
+  const { data: types } = await supabase
+    .from('incident_types')
+    .select('id, name')
+    .or(`agency_id.eq.${profile.agency_id},is_global_default.eq.true`)
+    .eq('is_active', true).order('display_order');
+  const sel = document.getElementById('f-incident-type');
+  (types || []).forEach(t => {
+    const o = document.createElement('option');
+    o.value = t.id; o.textContent = t.name; sel.appendChild(o);
+  });
+
+  let lastResults = [];
+
+  document.getElementById('run-search-btn').addEventListener('click', runSearch);
+  document.getElementById('f-name').addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    ['f-name','f-experience','f-incident-type','f-outcome','f-date-from','f-date-to']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('results-section').style.display = 'none';
+    document.getElementById('idle-state').style.display = 'block';
+  });
+
+  async function runSearch() {
+    const btn = document.getElementById('run-search-btn');
+    btn.classList.add('btn-loading'); btn.disabled = true;
+    document.getElementById('idle-state').style.display = 'none';
+
+    const name       = document.getElementById('f-name').value.trim();
+    const experience = document.getElementById('f-experience').value;
+    const incType    = document.getElementById('f-incident-type').value;
+    const outcome    = document.getElementById('f-outcome').value;
+    const dateFrom   = document.getElementById('f-date-from').value;
+    const dateTo     = document.getElementById('f-date-to').value;
+
+    // Step 1: find matching officers
+    let officerQ = supabase
+      .from('personnel_roster')
+      .select('id, first_name, last_name, badge_number, hire_date, performance_score, officer_status, rank:agency_ranks(rank_name)')
+      .eq('agency_id', profile.agency_id)
+      .eq('officer_status', 'active');
+
+    if (name) {
+      officerQ = officerQ.or(
+        `last_name.ilike.%${name}%,first_name.ilike.%${name}%,badge_number.ilike.%${name}%`
+      );
+    }
+
+    // Experience filter — computed from hire_date
+    if (experience) {
+      const now  = new Date();
+      const [min, max] = experience === '16+' ? [16, 999] : experience.split('-').map(Number);
+      const maxDate = new Date(now.getFullYear() - min, now.getMonth(), now.getDate()).toISOString().split('T')[0];
+      const minDate = max < 999
+        ? new Date(now.getFullYear() - max - 1, now.getMonth(), now.getDate()).toISOString().split('T')[0]
+        : '1900-01-01';
+      officerQ = officerQ.lte('hire_date', maxDate).gte('hire_date', minDate);
+    }
+
+    const { data: officers } = await officerQ;
+    if (!officers?.length) {
+      renderResults([], []);
+      btn.classList.remove('btn-loading'); btn.disabled = false;
+      return;
+    }
+
+    const officerIds = officers.map(o => o.id);
+
+    // Step 2: get reviews for these officers
+    let reviewQ = supabase
+      .from('bwc_reviews')
+      .select(`
+        id, atlas_case_number, incident_date, follow_up_outcome, status, primary_officer_id,
+        incident_type:incident_types(name)
+      `)
+      .in('primary_officer_id', officerIds)
+      .eq('agency_id', profile.agency_id)
+      .eq('status', 'approved')
+      .eq('is_ia_referral', false)
+      .order('incident_date', { ascending: false });
+
+    if (incType)   reviewQ = reviewQ.eq('incident_type_id', incType);
+    if (outcome)   reviewQ = reviewQ.eq('follow_up_outcome', outcome);
+    if (dateFrom)  reviewQ = reviewQ.gte('incident_date', dateFrom);
+    if (dateTo)    reviewQ = reviewQ.lte('incident_date', dateTo);
+
+    const { data: reviews } = await reviewQ;
+    lastResults = { officers, reviews: reviews || [] };
+
+    btn.classList.remove('btn-loading'); btn.disabled = false;
+    renderResults(officers, reviews || []);
+  }
+
+  function renderResults(officers, reviews) {
+    const reviewsByOfficer = {};
+    reviews.forEach(r => {
+      if (!reviewsByOfficer[r.primary_officer_id]) reviewsByOfficer[r.primary_officer_id] = [];
+      reviewsByOfficer[r.primary_officer_id].push(r);
+    });
+
+    // Filter to officers who have matching reviews (if review filters applied)
+    const hasFilters = document.getElementById('f-incident-type').value ||
+                       document.getElementById('f-outcome').value ||
+                       document.getElementById('f-date-from').value ||
+                       document.getElementById('f-date-to').value;
+
+    const displayOfficers = hasFilters
+      ? officers.filter(o => (reviewsByOfficer[o.id] || []).length > 0)
+      : officers;
+
+    document.getElementById('results-summary').textContent =
+      `${displayOfficers.length} officer${displayOfficers.length !== 1 ? 's' : ''} · ${reviews.length} review${reviews.length !== 1 ? 's' : ''} matching your filters`;
+
+    // Officer cards
+    const container = document.getElementById('officer-results');
+    if (!displayOfficers.length) {
+      container.innerHTML = '<div class="card empty-state"><div class="empty-title">No results</div><div class="empty-text">Try broadening your filters.</div></div>';
+      document.getElementById('review-results-card').style.display = 'none';
+      document.getElementById('outcome-dist-card').style.display = 'none';
+    } else {
+      container.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:0;">
+          ${displayOfficers.map(o => {
+            const oReviews = reviewsByOfficer[o.id] || [];
+            const yrs = o.hire_date
+              ? Math.floor((Date.now() - new Date(o.hire_date)) / (365.25 * 86400000)) : null;
+            return `
+              <a href="officer-profile.html?id=${o.id}" style="text-decoration:none;">
+                <div class="card" style="cursor:pointer;transition:border-color var(--transition);"
+                     onmouseover="this.style.borderColor='var(--border-focus)'"
+                     onmouseout="this.style.borderColor='var(--border)'">
+                  <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px;">
+                    ${escHtml(`${o.last_name}, ${o.first_name}`)}
+                  </div>
+                  <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">
+                    ${o.rank?.rank_name ? o.rank.rank_name + ' · ' : ''}
+                    ${o.badge_number ? '#' + o.badge_number : ''}
+                    ${yrs !== null ? ' · ' + yrs + ' yrs' : ''}
+                  </div>
+                  <div style="display:flex;justify-content:space-between;font-size:12px;">
+                    <span style="color:var(--text-secondary);">Score</span>
+                    <span style="font-family:var(--font-mono);font-weight:700;
+                      color:${scoreColor(o.performance_score)};">
+                      ${o.performance_score != null ? Math.round(o.performance_score) : '—'}
+                    </span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px;">
+                    <span style="color:var(--text-secondary);">Matching Reviews</span>
+                    <span style="font-family:var(--font-mono);font-weight:700;color:var(--accent);">
+                      ${oReviews.length}
+                    </span>
+                  </div>
+                </div>
+              </a>`;
+          }).join('')}
+        </div>`;
+
+      // Review table
+      document.getElementById('review-count-label').textContent = `${reviews.length} records`;
+      const tbody = document.getElementById('review-results-tbody');
+      tbody.innerHTML = reviews.slice(0, 100).map(r => {
+        const off = officers.find(o => o.id === r.primary_officer_id);
+        return `
+          <tr onclick="location.href='review-detail.html?id=${r.id}'" style="cursor:pointer;">
+            <td class="col-mono">${r.atlas_case_number || '—'}</td>
+            <td class="col-primary">${off ? escHtml(`${off.last_name}, ${off.first_name}`) : '—'}</td>
+            <td>${r.incident_type?.name || '—'}</td>
+            <td>${fmtDate(r.incident_date)}</td>
+            <td>${outcomeBadge(r.follow_up_outcome)}</td>
+            <td>${statusBadge(r.status)}</td>
+          </tr>`;
+      }).join('');
+      document.getElementById('review-results-card').style.display = 'block';
+
+      // Outcome distribution
+      const counts = {};
+      reviews.forEach(r => { counts[r.follow_up_outcome] = (counts[r.follow_up_outcome] || 0) + 1; });
+      const total = reviews.length;
+      const order = ['no_action','commendation','coaching','training','internal_affairs','pip'];
+      document.getElementById('outcome-dist-content').innerHTML = total
+        ? order.filter(o => counts[o]).map(o => {
+            const pct = Math.round((counts[o] / total) * 100);
+            return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+              ${outcomeBadge(o)}
+              <div style="flex:1;height:6px;background:var(--bg-overlay);border-radius:3px;">
+                <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:3px;"></div>
+              </div>
+              <span class="mono" style="font-size:11px;color:var(--text-muted);width:40px;text-align:right;">
+                ${counts[o]} (${pct}%)
+              </span>
+            </div>`;
+          }).join('')
+        : '<div style="color:var(--text-muted);font-size:13px;">No review data.</div>';
+    }
+
+    document.getElementById('results-section').style.display = 'block';
+  }
+
+  // CSV export
+  document.getElementById('export-csv-btn').addEventListener('click', () => {
+    if (!lastResults?.reviews?.length) return;
+    const { officers, reviews } = lastResults;
+    const officerMap = {};
+    officers.forEach(o => { officerMap[o.id] = `${o.last_name}, ${o.first_name}`; });
+
+    const rows = [
+      ['Case #','Officer','Incident Type','Incident Date','Follow-Up Outcome','Status'].join(','),
+      ...reviews.map(r => [
+        r.atlas_case_number || '',
+        `"${officerMap[r.primary_officer_id] || ''}"`,
+        `"${r.incident_type?.name || ''}"`,
+        r.incident_date || '',
+        r.follow_up_outcome || '',
+        r.status || ''
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([rows], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `atlas-search-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  function scoreColor(s) {
+    if (s == null) return 'var(--text-muted)';
+    if (s >= 90) return 'var(--success)';
+    if (s >= 80) return 'var(--accent)';
+    if (s >= 70) return 'var(--warning)';
+    return 'var(--danger)';
+  }
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function outcomeBadge(o) {
+    const m = { no_action:['No Action','badge-no-action'], commendation:['Commendation','badge-commendation'],
+      coaching:['Coaching','badge-coaching'], training:['Training','badge-training'],
+      internal_affairs:['IA Referral','badge-ia'], pip:['PIP','badge-pip'] };
+    const [l, c] = m[o] || [o,'badge-muted'];
+    return `<span class="badge ${c}">${l}</span>`;
+  }
+
+  function statusBadge(s) {
+    const m = { draft:'badge-draft', approved:'badge-approved', rejected:'badge-rejected' };
+    const l = s ? s.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase()) : '—';
+    return `<span class="badge ${m[s]||'badge-muted'}">${l}</span>`;
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+</script>
+</body>
+</html>

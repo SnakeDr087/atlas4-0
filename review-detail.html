@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Review Detail</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .detail-grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+    .detail-section { margin-bottom: 20px; }
+    .detail-section-title {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-muted); margin-bottom: 12px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .detail-row { display: grid; grid-template-columns: 160px 1fr; gap: 8px; margin-bottom: 8px; align-items: start; }
+    .detail-label { font-size: 12px; color: var(--text-muted); font-weight: 500; padding-top: 1px; }
+    .detail-value { font-size: 13px; color: var(--text-primary); }
+    .kpi-result-row { display: grid; grid-template-columns: 1fr auto; gap: 12px;
+      padding: 9px 12px; border-bottom: 1px solid var(--border-subtle); }
+    .kpi-result-row:last-child { border-bottom: none; }
+    .kpi-result-text { font-size: 13px; color: var(--text-secondary); }
+    .sidebar-panel { position: sticky; top: calc(var(--topbar-height) + 20px); display: flex; flex-direction: column; gap: 16px; }
+    .notes-confidential {
+      background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.2);
+      border-radius: var(--border-radius); padding: 12px 14px;
+    }
+    .notes-body { font-size: 13px; color: var(--text-secondary); line-height: 1.7; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <!-- Loading -->
+      <div id="loading-state" style="display:flex;align-items:center;justify-content:center;height:300px;">
+        <div class="spinner spinner-lg"></div>
+      </div>
+
+      <!-- Not found -->
+      <div id="not-found" style="display:none;" class="empty-state">
+        <div class="empty-title">Review not found</div>
+        <div class="empty-text">This review may have been deleted or you may not have access.</div>
+        <a href="reviews.html" class="btn btn-secondary" style="margin-top:16px;">← Back to Reviews</a>
+      </div>
+
+      <!-- Content -->
+      <div id="page-content" style="display:none;" class="animate-fade-in">
+
+        <!-- Header row -->
+        <div class="flex items-center justify-between" style="margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+              <a href="reviews.html" style="color:var(--text-muted);font-size:13px;">Reviews</a>
+              <span style="color:var(--text-muted);">/</span>
+              <span id="case-num-header" class="mono" style="font-size:13px;color:var(--accent);"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <h1 id="officer-name-header" style="font-size:22px;"></h1>
+              <span id="status-badge-header"></span>
+              <span id="outcome-badge-header"></span>
+            </div>
+          </div>
+          <div id="action-buttons" style="display:flex;gap:8px;"></div>
+        </div>
+
+        <div class="detail-grid">
+
+          <!-- Left: main content -->
+          <div>
+
+            <!-- Section 1 & 2: Review + Location -->
+            <div class="card detail-section">
+              <div class="detail-section-title">Review Details</div>
+              <div class="detail-row">
+                <div class="detail-label">ATLAS Case #</div>
+                <div class="detail-value mono" id="d-atlas-case"></div>
+              </div>
+              <div class="detail-row">
+                <div class="detail-label">Police Case #</div>
+                <div class="detail-value" id="d-police-case"></div>
+              </div>
+              <div class="detail-row">
+                <div class="detail-label">Review Date</div>
+                <div class="detail-value" id="d-review-date"></div>
+              </div>
+              <div class="detail-row">
+                <div class="detail-label">Incident Date</div>
+                <div class="detail-value" id="d-incident-date"></div>
+              </div>
+              <div class="detail-row">
+                <div class="detail-label">Recording Time</div>
+                <div class="detail-value" id="d-recording-time"></div>
+              </div>
+              <div class="detail-row">
+                <div class="detail-label">Department</div>
+                <div class="detail-value" id="d-agency"></div>
+              </div>
+            </div>
+
+            <div class="card detail-section">
+              <div class="detail-section-title">Incident Location</div>
+              <div class="detail-row">
+                <div class="detail-label">Address</div>
+                <div class="detail-value" id="d-address"></div>
+              </div>
+            </div>
+
+            <!-- Section 3: Personnel -->
+            <div class="card detail-section">
+              <div class="detail-section-title">Personnel</div>
+              <div class="detail-row">
+                <div class="detail-label">Reviewing Supervisor</div>
+                <div class="detail-value" id="d-supervisor"></div>
+              </div>
+              <div class="detail-row">
+                <div class="detail-label">Primary Officer</div>
+                <div class="detail-value" id="d-primary-officer"></div>
+              </div>
+              <div class="detail-row" id="d-backup-row">
+                <div class="detail-label">Backup Officer(s)</div>
+                <div class="detail-value" id="d-backup-officers"></div>
+              </div>
+            </div>
+
+            <!-- Section 4: Incident Analysis -->
+            <div class="card detail-section">
+              <div class="detail-section-title">Incident Analysis</div>
+              <div class="detail-row">
+                <div class="detail-label">Incident Type</div>
+                <div class="detail-value" id="d-incident-type"></div>
+              </div>
+              <div class="detail-row">
+                <div class="detail-label">Disposition</div>
+                <div class="detail-value" id="d-disposition"></div>
+              </div>
+
+              <!-- KPI results -->
+              <div id="kpi-results-section" style="margin-top:14px;display:none;">
+                <div class="detail-section-title">KPI Checklist Results</div>
+                <div id="kpi-results-list" style="background:var(--bg-elevated);border-radius:var(--border-radius);overflow:hidden;"></div>
+              </div>
+
+              <!-- Safety checklist -->
+              <div id="safety-results-section" style="margin-top:14px;display:none;">
+                <div class="detail-section-title">Officer Safety Checklist</div>
+                <div id="safety-results-list" style="background:var(--bg-elevated);border-radius:var(--border-radius);overflow:hidden;"></div>
+              </div>
+            </div>
+
+            <!-- Section 6: Notes -->
+            <div class="card detail-section">
+              <div class="detail-section-title">Report-Facing Notes</div>
+              <div class="notes-body" id="d-report-notes"></div>
+            </div>
+
+            <div class="card detail-section" id="internal-notes-card" style="display:none;">
+              <div class="flex items-center justify-between" style="margin-bottom:10px;">
+                <div class="detail-section-title" style="margin:0;">Internal Notes</div>
+                <span class="badge badge-warning" style="font-size:10px;">Confidential — never printed</span>
+              </div>
+              <div class="notes-body notes-confidential" id="d-internal-notes"></div>
+            </div>
+
+          </div>
+
+          <!-- Right sidebar -->
+          <div class="sidebar-panel">
+
+            <!-- Outcome card -->
+            <div class="card">
+              <div class="detail-section-title">Follow-Up Outcome</div>
+              <div id="d-outcome-large" style="font-size:18px;font-weight:700;margin-bottom:6px;"></div>
+              <div id="d-outcome-desc" style="font-size:12px;color:var(--text-muted);"></div>
+            </div>
+
+            <!-- Linked Delta T cases -->
+            <div class="card" id="delta-t-panel" style="display:none;">
+              <div class="detail-section-title">Linked Delta T Cases</div>
+              <div id="delta-t-list"></div>
+            </div>
+
+            <!-- Linked IA case -->
+            <div class="card" id="ia-panel" style="display:none;">
+              <div class="detail-section-title">IA Case</div>
+              <div id="ia-detail"></div>
+            </div>
+
+            <!-- Linked PIP -->
+            <div class="card" id="pip-panel" style="display:none;">
+              <div class="detail-section-title">PIP</div>
+              <div id="pip-detail"></div>
+            </div>
+
+            <!-- Audit trail -->
+            <div class="card">
+              <div class="detail-section-title">Audit</div>
+              <div id="audit-trail" style="font-size:12px;color:var(--text-muted);"></div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth, getCurrentProfile, hasRole, ROLES } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({ requireAuth: true });
+  renderNav(profile, 'reviews');
+  renderTopbar('Review Detail');
+
+  const params   = new URLSearchParams(window.location.search);
+  const reviewId = params.get('id');
+  if (!reviewId) { location.href = 'reviews.html'; }
+
+  // ── Load review ────────────────────────────────────────
+  const { data: review, error } = await supabase
+    .from('bwc_reviews')
+    .select(`
+      *,
+      agency:agencies(name),
+      supervisor:profiles!reviewing_supervisor_id(full_name),
+      primary_officer:personnel_roster!primary_officer_id(
+        id, first_name, last_name, badge_number,
+        rank:agency_ranks(rank_name)
+      ),
+      incident_type:incident_types(name)
+    `)
+    .eq('id', reviewId)
+    .single();
+
+  document.getElementById('loading-state').style.display = 'none';
+
+  if (error || !review) {
+    document.getElementById('not-found').style.display = 'block';
+    throw new Error('Review not found');
+  }
+
+  document.getElementById('page-content').style.display = 'block';
+  document.title = `ATLAS — ${review.atlas_case_number || 'Review'}`;
+
+  // ── Populate header ────────────────────────────────────
+  const officerName = review.primary_officer
+    ? `${review.primary_officer.last_name}, ${review.primary_officer.first_name}`
+    : 'Unknown Officer';
+
+  document.getElementById('case-num-header').textContent    = review.atlas_case_number || '—';
+  document.getElementById('officer-name-header').textContent = officerName;
+  document.getElementById('status-badge-header').innerHTML  = statusBadge(review.status);
+  document.getElementById('outcome-badge-header').innerHTML = outcomeBadge(review.follow_up_outcome);
+
+  // ── Populate fields ────────────────────────────────────
+  set('d-atlas-case',      review.atlas_case_number || '—');
+  set('d-police-case',     review.police_case_number || '—');
+  set('d-review-date',     fmtDate(review.review_date));
+  set('d-incident-date',   fmtDate(review.incident_date));
+  set('d-recording-time',
+    review.recording_start_time
+      ? `${review.recording_start_time} — ${review.recording_end_time || '?'}`
+      : '—');
+  set('d-agency',          review.agency?.name || '—');
+
+  // Location
+  const addrParts = [
+    review.street,
+    review.apt_suite ? `Apt ${review.apt_suite}` : null,
+    review.floor_number ? `Floor ${review.floor_number}` : null,
+    review.city,
+    review.state
+  ].filter(Boolean);
+  set('d-address', addrParts.join(', ') || '—');
+
+  // Personnel
+  set('d-supervisor', review.supervisor?.full_name || '—');
+  const rankLabel = review.primary_officer?.rank?.rank_name
+    ? `${review.primary_officer.rank.rank_name} · ` : '';
+  set('d-primary-officer',
+    review.primary_officer
+      ? `${rankLabel}${officerName}${review.primary_officer.badge_number ? ` (#${review.primary_officer.badge_number})` : ''}`
+      : '—');
+
+  if (review.backup_officer_ids?.length) {
+    document.getElementById('d-backup-officers').textContent =
+      `${review.backup_officer_ids.length} backup officer(s) documented`;
+  } else {
+    document.getElementById('d-backup-row').style.display = 'none';
+  }
+
+  // Incident
+  set('d-incident-type', review.incident_type?.name || '—');
+  set('d-disposition', review.disposition
+    ? review.disposition.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())
+    : '—');
+
+  // Outcome sidebar
+  const outcomeLabels = {
+    no_action:        ['No Action',     'Performance met or exceeded standards.'],
+    commendation:     ['Commendation',  'Exemplary performance — formally documented.'],
+    coaching:         ['Coaching',      'Informal developmental guidance assigned.'],
+    training:         ['Training',      'Formal training required. Delta T cases opened.'],
+    internal_affairs: ['IA Referral',   'Formal misconduct referral. IA case opened.'],
+    pip:              ['PIP',           'Performance Improvement Plan opened.']
+  };
+  const [oLabel, oDesc] = outcomeLabels[review.follow_up_outcome] || ['—', ''];
+  document.getElementById('d-outcome-large').innerHTML = outcomeBadge(review.follow_up_outcome);
+  set('d-outcome-desc', oDesc);
+
+  // Notes
+  set('d-report-notes', review.report_notes || 'No report notes recorded.');
+
+  // Internal notes — only show to supervisor who wrote it, or admin/leadership
+  const canSeeInternal =
+    review.reviewing_supervisor_id === profile.id ||
+    ['super_admin','chief','agency_admin'].includes(profile.role);
+
+  if (canSeeInternal && review.internal_notes) {
+    document.getElementById('internal-notes-card').style.display = 'block';
+    set('d-internal-notes', review.internal_notes);
+  }
+
+  // ── KPI results ────────────────────────────────────────
+  if (review.kpi_responses && Object.keys(review.kpi_responses).length) {
+    const kpiIds = Object.keys(review.kpi_responses);
+    const { data: kpis } = await supabase
+      .from('kpi_definitions')
+      .select('id, kpi_text')
+      .in('id', kpiIds);
+
+    if (kpis?.length) {
+      const kpiMap = {};
+      kpis.forEach(k => { kpiMap[k.id] = k.kpi_text; });
+
+      const list = document.getElementById('kpi-results-list');
+      list.innerHTML = kpiIds.map(id => {
+        const val   = review.kpi_responses[id];
+        const label = val === 'observed' ? 'Observed' : val === 'not_observed' ? 'Not Observed' : 'N/A';
+        const cls   = val === 'observed' ? 'badge-success' : val === 'not_observed' ? 'badge-danger' : 'badge-muted';
+        return `
+          <div class="kpi-result-row">
+            <div class="kpi-result-text">${escHtml(kpiMap[id] || id)}</div>
+            <span class="badge ${cls}">${label}</span>
+          </div>`;
+      }).join('');
+
+      document.getElementById('kpi-results-section').style.display = 'block';
+    }
+  }
+
+  // ── Safety checklist results ───────────────────────────
+  if (review.safety_checklist && Object.keys(review.safety_checklist).length) {
+    const itemIds = Object.keys(review.safety_checklist);
+    const { data: items } = await supabase
+      .from('safety_checklist_items')
+      .select('id, item_text')
+      .in('id', itemIds);
+
+    if (items?.length) {
+      const itemMap = {};
+      items.forEach(i => { itemMap[i.id] = i.item_text; });
+
+      const list = document.getElementById('safety-results-list');
+      list.innerHTML = itemIds.map(id => {
+        const checked = review.safety_checklist[id];
+        return `
+          <div class="kpi-result-row">
+            <div class="kpi-result-text">${escHtml(itemMap[id] || id)}</div>
+            <span class="badge ${checked ? 'badge-success' : 'badge-muted'}">
+              ${checked ? '✓ Demonstrated' : '— Not checked'}
+            </span>
+          </div>`;
+      }).join('');
+
+      document.getElementById('safety-results-section').style.display = 'block';
+    }
+  }
+
+  // ── Linked Delta T cases ───────────────────────────────
+  if (review.follow_up_outcome === 'training') {
+    const { data: deltaCases } = await supabase
+      .from('delta_t_cases')
+      .select('id, kpi_text_snapshot, status, t1_incident_date')
+      .eq('source_review_id', review.id);
+
+    if (deltaCases?.length) {
+      document.getElementById('delta-t-panel').style.display = 'block';
+      document.getElementById('delta-t-list').innerHTML = deltaCases.map(c => `
+        <a href="delta-t.html?id=${c.id}" style="display:block;padding:10px 0;
+           border-bottom:1px solid var(--border-subtle);text-decoration:none;">
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;"
+               class="truncate">${escHtml(c.kpi_text_snapshot)}</div>
+          <span class="badge ${c.status === 'open' ? 'badge-warning' : 'badge-success'}">
+            ${c.status}
+          </span>
+        </a>
+      `).join('');
+    }
+  }
+
+  // ── Linked IA / PIP ────────────────────────────────────
+  if (review.is_ia_referral) {
+    const { data: iaCase } = await supabase
+      .from('ia_cases')
+      .select('id, case_number, status')
+      .eq('source_review_id', review.id)
+      .single();
+
+    if (iaCase) {
+      document.getElementById('ia-panel').style.display = 'block';
+      document.getElementById('ia-detail').innerHTML = `
+        <a href="ia-case-detail.html?id=${iaCase.id}" style="display:flex;align-items:center;
+           justify-content:space-between;text-decoration:none;">
+          <span class="mono" style="font-size:13px;color:var(--accent);">${iaCase.case_number}</span>
+          <span class="badge badge-danger">${iaCase.status}</span>
+        </a>`;
+    }
+  }
+
+  if (review.follow_up_outcome === 'pip') {
+    const { data: pip } = await supabase
+      .from('pips')
+      .select('id, case_number, status')
+      .eq('source_review_id', review.id)
+      .single();
+
+    if (pip) {
+      document.getElementById('pip-panel').style.display = 'block';
+      document.getElementById('pip-detail').innerHTML = `
+        <a href="pip-detail.html?id=${pip.id}" style="display:flex;align-items:center;
+           justify-content:space-between;text-decoration:none;">
+          <span class="mono" style="font-size:13px;color:var(--accent);">${pip.case_number}</span>
+          <span class="badge badge-warning">${pip.status}</span>
+        </a>`;
+    }
+  }
+
+  // ── Audit trail ────────────────────────────────────────
+  const auditLines = [
+    review.created_at ? `Created ${fmtDateTime(review.created_at)}` : null,
+    review.submitted_at ? `Submitted ${fmtDateTime(review.submitted_at)}` : null,
+    review.approved_at  ? `Approved ${fmtDateTime(review.approved_at)}` : null
+  ].filter(Boolean);
+
+  document.getElementById('audit-trail').innerHTML =
+    auditLines.map(l => `<div style="margin-bottom:4px;">${l}</div>`).join('');
+
+  // ── Action buttons ─────────────────────────────────────
+  const actions = document.getElementById('action-buttons');
+
+  // Supervisor can edit their own drafts
+  if (review.status === 'draft' && review.reviewing_supervisor_id === profile.id) {
+    actions.innerHTML += `<a href="review-new.html?edit=${review.id}" class="btn btn-secondary">Edit Draft</a>`;
+  }
+
+  // View Report button — always shown for approved reviews
+  if (review.status === 'approved') {
+    actions.innerHTML += `<a href="review-report.html?id=${review.id}" class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:5px;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+      View Report
+    </a>`;
+  }
+
+  // Back button always
+  actions.innerHTML += `<a href="reviews.html" class="btn btn-ghost">← Reviews</a>`;
+
+  // ── Helpers ────────────────────────────────────────────
+  function set(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US',
+      { month: 'long', day: 'numeric', year: 'numeric' });
+  }
+
+  function fmtDateTime(str) {
+    return new Date(str).toLocaleString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  function statusBadge(s) {
+    const m = { draft:'badge-draft', pending_approval:'badge-pending',
+                approved:'badge-approved', rejected:'badge-rejected' };
+    const l = s ? s.replace('_',' ').replace(/\b\w/g, c => c.toUpperCase()) : '—';
+    return `<span class="badge ${m[s]||'badge-muted'}">${l}</span>`;
+  }
+
+  function outcomeBadge(o) {
+    if (!o) return '<span class="badge badge-muted">—</span>';
+    const m = {
+      no_action:        ['No Action',    'badge-no-action'],
+      commendation:     ['Commendation', 'badge-commendation'],
+      coaching:         ['Coaching',     'badge-coaching'],
+      training:         ['Training',     'badge-training'],
+      internal_affairs: ['IA Referral',  'badge-ia'],
+      pip:              ['PIP',          'badge-pip']
+    };
+    const [l, c] = m[o] || [o, 'badge-muted'];
+    return `<span class="badge ${c}">${l}</span>`;
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+</script>
+</body>
+</html>

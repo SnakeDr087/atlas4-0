@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — IA Case</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div id="loading-state" style="display:flex;align-items:center;justify-content:center;height:300px;">
+        <div class="spinner spinner-lg"></div>
+      </div>
+      <div id="not-found" style="display:none;" class="empty-state">
+        <div class="empty-title">IA Case not found</div>
+        <div class="empty-text">You may not have access to this case.</div>
+        <a href="ia-cases.html" class="btn btn-secondary" style="margin-top:16px;">← Back</a>
+      </div>
+
+      <div id="page-content" style="display:none;" class="animate-fade-in">
+
+        <div class="flex items-center justify-between" style="margin-bottom:24px;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <a href="ia-cases.html" style="font-size:13px;color:var(--text-muted);">IA Cases</a>
+              <span style="color:var(--text-muted);">/</span>
+              <span id="case-num" class="mono" style="font-size:13px;color:var(--accent);"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <h1 id="officer-name" style="font-size:22px;"></h1>
+              <span id="status-badge"></span>
+            </div>
+          </div>
+          <div id="status-actions" style="display:flex;gap:8px;"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start;">
+
+          <!-- Main -->
+          <div>
+            <div class="card" style="margin-bottom:20px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;
+                   color:var(--text-muted);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border-subtle);">
+                Case Details
+              </div>
+              <div style="display:grid;grid-template-columns:160px 1fr;gap:8px 12px;">
+                <div style="font-size:12px;color:var(--text-muted);">Case Number</div>
+                <div class="mono" id="d-case-num" style="font-size:13px;color:var(--accent);"></div>
+                <div style="font-size:12px;color:var(--text-muted);">Officer</div>
+                <div id="d-officer" style="font-size:13px;color:var(--text-primary);"></div>
+                <div style="font-size:12px;color:var(--text-muted);">Submitted By</div>
+                <div id="d-supervisor" style="font-size:13px;color:var(--text-secondary);"></div>
+                <div style="font-size:12px;color:var(--text-muted);">Opened</div>
+                <div id="d-opened" style="font-size:13px;color:var(--text-secondary);"></div>
+                <div style="font-size:12px;color:var(--text-muted);">Source Review</div>
+                <div id="d-review-link" style="font-size:13px;"></div>
+              </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="card" style="margin-bottom:20px;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;
+                   color:var(--text-muted);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border-subtle);">
+                Case Notes
+              </div>
+              <div id="d-notes" style="font-size:13px;color:var(--text-secondary);min-height:40px;"></div>
+              <div id="notes-edit" style="display:none;margin-top:12px;">
+                <textarea id="notes-input" rows="4" placeholder="Add case notes…"></textarea>
+                <button class="btn btn-primary btn-sm" id="save-notes-btn" style="margin-top:8px;">Save Notes</button>
+              </div>
+              <button id="edit-notes-btn" class="btn btn-ghost btn-sm" style="margin-top:10px;">Edit Notes</button>
+            </div>
+          </div>
+
+          <!-- Sidebar -->
+          <div style="display:flex;flex-direction:column;gap:16px;position:sticky;top:calc(var(--topbar-height)+20px);">
+
+            <!-- Status management (Chief / IA only) -->
+            <div class="card" id="status-panel" style="display:none;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;
+                   color:var(--text-muted);margin-bottom:12px;">Update Status</div>
+              <select id="status-select" style="margin-bottom:10px;">
+                <option value="open">Open</option>
+                <option value="under_review">Under Review</option>
+                <option value="closed">Closed</option>
+                <option value="unfounded">Unfounded</option>
+              </select>
+              <button class="btn btn-primary btn-sm w-full" id="update-status-btn">Update Status</button>
+            </div>
+
+            <!-- Access list -->
+            <div class="card" id="access-panel" style="display:none;">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;
+                   color:var(--text-muted);margin-bottom:12px;">Case Access</div>
+              <div id="access-list" style="margin-bottom:12px;"></div>
+              <div style="display:flex;gap:8px;">
+                <select id="grant-user-select" style="flex:1;">
+                  <option value="">Add user…</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" id="grant-access-btn">Add</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin','chief','internal_affairs','training_bureau']
+  });
+  renderNav(profile, 'ia-cases');
+  renderTopbar('IA Case Detail');
+
+  const params = new URLSearchParams(window.location.search);
+  const caseId = params.get('id');
+  if (!caseId) { location.href = 'ia-cases.html'; }
+
+  const { data: iaCase, error } = await supabase
+    .from('ia_cases')
+    .select(`
+      *,
+      officer:personnel_roster(first_name, last_name, badge_number),
+      supervisor:profiles!submitting_supervisor_id(full_name)
+    `)
+    .eq('id', caseId)
+    .single();
+
+  document.getElementById('loading-state').style.display = 'none';
+
+  if (error || !iaCase) {
+    document.getElementById('not-found').style.display = 'block';
+    throw new Error('Not found');
+  }
+
+  document.getElementById('page-content').style.display = 'block';
+
+  const officerName = iaCase.officer
+    ? `${iaCase.officer.last_name}, ${iaCase.officer.first_name}` : 'Unknown';
+
+  document.getElementById('case-num').textContent  = iaCase.case_number || '—';
+  document.getElementById('officer-name').textContent = officerName;
+  document.getElementById('status-badge').innerHTML = iaBadge(iaCase.status);
+  document.getElementById('d-case-num').textContent  = iaCase.case_number || '—';
+  document.getElementById('d-officer').textContent   = officerName + (iaCase.officer?.badge_number ? ` (#${iaCase.officer.badge_number})` : '');
+  document.getElementById('d-supervisor').textContent = iaCase.supervisor?.full_name || '—';
+  document.getElementById('d-opened').textContent    = fmtDateTime(iaCase.created_at);
+  document.getElementById('d-review-link').innerHTML = iaCase.source_review_id
+    ? `<a href="review-detail.html?id=${iaCase.source_review_id}" style="color:var(--accent);">View Source Review →</a>`
+    : '—';
+
+  const notesEl = document.getElementById('d-notes');
+  const notesInput = document.getElementById('notes-input');
+  notesEl.textContent = iaCase.notes || 'No notes recorded.';
+  notesInput.value    = iaCase.notes || '';
+
+  // Chief and IA can edit status / access
+  const canManage = ['super_admin','chief','internal_affairs'].includes(profile.role);
+
+  if (canManage) {
+    document.getElementById('status-panel').style.display = 'block';
+    document.getElementById('access-panel').style.display = 'block';
+    document.getElementById('status-select').value = iaCase.status;
+    document.getElementById('notes-edit').style.display = 'block';
+    document.getElementById('edit-notes-btn').style.display = 'none';
+  }
+
+  // Update status
+  document.getElementById('update-status-btn')?.addEventListener('click', async () => {
+    const newStatus = document.getElementById('status-select').value;
+    const { error } = await supabase
+      .from('ia_cases')
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', caseId);
+
+    if (error) { showToast('error', 'Update failed', error.message); return; }
+    document.getElementById('status-badge').innerHTML = iaBadge(newStatus);
+    showToast('success', 'Status updated');
+  });
+
+  // Save notes
+  document.getElementById('save-notes-btn')?.addEventListener('click', async () => {
+    const notes = notesInput.value.trim();
+    const { error } = await supabase
+      .from('ia_cases')
+      .update({ notes, updated_at: new Date().toISOString() })
+      .eq('id', caseId);
+
+    if (error) { showToast('error', 'Save failed', error.message); return; }
+    notesEl.textContent = notes || 'No notes recorded.';
+    showToast('success', 'Notes saved');
+  });
+
+  // Access list
+  async function loadAccessList() {
+    const { data: access } = await supabase
+      .from('ia_access_list')
+      .select('id, profile_id, granted_at, profile:profiles(full_name, role)')
+      .eq('ia_case_id', caseId)
+      .is('revoked_at', null);
+
+    const list = document.getElementById('access-list');
+    if (!access?.length) {
+      list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">No named individuals added.</div>';
+      return;
+    }
+
+    list.innerHTML = access.map(a => `
+      <div style="display:flex;align-items:center;justify-content:space-between;
+           padding:6px 0;border-bottom:1px solid var(--border-subtle);">
+        <div>
+          <div style="font-size:13px;color:var(--text-primary);">${escHtml(a.profile?.full_name||'Unknown')}</div>
+          <div style="font-size:11px;color:var(--text-muted);">${a.profile?.role||''}</div>
+        </div>
+        ${canManage ? `<button class="btn btn-ghost btn-sm" onclick="revokeAccess('${a.id}')">Revoke</button>` : ''}
+      </div>
+    `).join('');
+  }
+
+  window.revokeAccess = async function(accessId) {
+    await supabase.from('ia_access_list')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('id', accessId);
+    await loadAccessList();
+    showToast('success', 'Access revoked');
+  };
+
+  // Load agency users for grant dropdown
+  if (canManage) {
+    const { data: users } = await supabase
+      .from('profiles')
+      .select('id, full_name, role')
+      .eq('agency_id', profile.agency_id)
+      .eq('is_active', true)
+      .order('full_name');
+
+    const sel = document.getElementById('grant-user-select');
+    (users || []).forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = `${u.full_name} (${u.role.replace('_',' ')})`;
+      sel.appendChild(opt);
+    });
+
+    document.getElementById('grant-access-btn').addEventListener('click', async () => {
+      const userId = sel.value;
+      if (!userId) return;
+
+      const { error } = await supabase.from('ia_access_list').upsert({
+        ia_case_id: caseId,
+        profile_id: userId,
+        granted_by: profile.id
+      }, { onConflict: 'ia_case_id,profile_id', ignoreDuplicates: false });
+
+      if (error) { showToast('error', 'Failed', error.message); return; }
+      sel.value = '';
+      await loadAccessList();
+      showToast('success', 'Access granted');
+    });
+  }
+
+  await loadAccessList();
+
+  function iaBadge(s) {
+    const m = { open:'badge-danger', under_review:'badge-warning',
+                closed:'badge-muted', unfounded:'badge-muted' };
+    const l = s ? s.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase()) : '—';
+    return `<span class="badge ${m[s]||'badge-muted'}">${l}</span>`;
+  }
+
+  function fmtDateTime(str) {
+    return new Date(str).toLocaleString('en-US',
+      { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(type, title, body='') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div>${body?`<div class="toast-body">${body}</div>`:''}</div>`;
+    c.appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+</script>
+</body>
+</html>

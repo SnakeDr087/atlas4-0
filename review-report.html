@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BWC Review Report — ATLAS</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="print.css" media="print">
+  <style>
+    /* ── Screen wrapper ── */
+    .report-wrap { max-width:860px; margin:0 auto; padding:32px 24px; }
+    .report-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; padding-bottom:16px; border-bottom:1px solid var(--border); }
+    .report-toolbar-left { display:flex; gap:10px; }
+
+    /* ── Report document ── */
+    .report-doc { background:#fff; border:1px solid var(--border); border-radius:8px; padding:40px 48px; box-shadow:0 2px 12px rgba(0,0,0,.06); }
+
+    /* ── Header ── */
+    .rpt-header { display:flex; align-items:flex-start; justify-content:space-between; padding-bottom:20px; border-bottom:3px solid #1a1a2e; margin-bottom:20px; }
+    .rpt-logo-agency { display:flex; align-items:center; gap:14px; }
+    .rpt-agency-img { height:60px; width:60px; object-fit:contain; }
+    .rpt-agency-placeholder { height:60px; width:60px; background:#1a1a2e; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:18px; font-weight:800; }
+    .rpt-agency-name { font-size:18px; font-weight:800; color:#1a1a2e; line-height:1.2; }
+    .rpt-agency-sub { font-size:11px; color:#666; margin-top:2px; text-transform:uppercase; letter-spacing:.06em; }
+    .rpt-atlas-logo { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+    .rpt-atlas-wordmark { font-size:22px; font-weight:900; letter-spacing:.12em; color:#1a1a2e; }
+    .rpt-atlas-wordmark span { color:#4f46e5; }
+    .rpt-atlas-sub { font-size:9px; color:#888; text-transform:uppercase; letter-spacing:.1em; text-align:right; }
+
+    /* ── Report title banner ── */
+    .rpt-title-bar { background:#1a1a2e; color:#fff; padding:12px 20px; border-radius:4px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; }
+    .rpt-title-bar h2 { font-size:15px; font-weight:700; margin:0; letter-spacing:.04em; text-transform:uppercase; }
+    .rpt-case-num { font-size:13px; font-weight:700; color:#a5b4fc; letter-spacing:.06em; }
+    .rpt-confidential { font-size:9px; color:#888; text-align:center; letter-spacing:.15em; text-transform:uppercase; border:1px solid #ddd; padding:4px 8px; border-radius:3px; margin-bottom:20px; }
+
+    /* ── Sections ── */
+    .rpt-section { margin-bottom:22px; }
+    .rpt-section-title { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; color:#4f46e5; border-bottom:1.5px solid #4f46e5; padding-bottom:4px; margin-bottom:12px; }
+    .rpt-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; }
+    .rpt-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px 24px; }
+    .rpt-field { }
+    .rpt-field-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#888; margin-bottom:2px; }
+    .rpt-field-value { font-size:13px; color:#1a1a2e; font-weight:500; border-bottom:1px solid #e5e7eb; padding-bottom:4px; min-height:22px; }
+    .rpt-field-value.mono { font-family:'IBM Plex Mono', monospace; font-weight:700; color:#4f46e5; }
+
+    /* ── KPI table ── */
+    .rpt-kpi-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .rpt-kpi-table th { background:#f5f5f8; padding:6px 10px; text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#666; border:1px solid #e5e7eb; }
+    .rpt-kpi-table td { padding:7px 10px; border:1px solid #e5e7eb; vertical-align:top; color:#1a1a2e; }
+    .rpt-kpi-table tr:nth-child(even) td { background:#fafafa; }
+    .rpt-result { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .rpt-result-observed  { background:#d1fae5; color:#065f46; }
+    .rpt-result-not       { background:#fee2e2; color:#991b1b; }
+    .rpt-result-na        { background:#f3f4f6; color:#6b7280; }
+
+    /* ── Safety items ── */
+    .rpt-safety-item { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #f3f4f6; font-size:12px; color:#1a1a2e; }
+    .rpt-safety-item:last-child { border-bottom:none; }
+    .rpt-safety-dot { width:8px; height:8px; border-radius:50%; background:#dc2626; flex-shrink:0; }
+
+    /* ── Disposition tags ── */
+    .rpt-disp-tags { display:flex; flex-wrap:wrap; gap:6px; }
+    .rpt-disp-tag { background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; border-radius:4px; padding:3px 10px; font-size:11px; font-weight:600; }
+
+    /* ── Outcome ── */
+    .rpt-outcome { display:inline-block; padding:4px 14px; border-radius:4px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+    .rpt-outcome-no_action        { background:#d1fae5; color:#065f46; }
+    .rpt-outcome-commendation     { background:#fef9c3; color:#713f12; }
+    .rpt-outcome-coaching         { background:#dbeafe; color:#1e40af; }
+    .rpt-outcome-training         { background:#f3e8ff; color:#6b21a8; }
+    .rpt-outcome-internal_affairs { background:#fee2e2; color:#991b1b; }
+    .rpt-outcome-pip              { background:#ffedd5; color:#9a3412; }
+
+    /* ── Notes box ── */
+    .rpt-notes { background:#fafafa; border:1px solid #e5e7eb; border-radius:4px; padding:12px 14px; font-size:12px; color:#1a1a2e; line-height:1.6; min-height:60px; white-space:pre-wrap; }
+
+    /* ── Signature block ── */
+    .rpt-sig-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px; margin-top:32px; }
+    .rpt-sig-line { border-top:1.5px solid #1a1a2e; padding-top:5px; }
+    .rpt-sig-label { font-size:9px; color:#888; text-transform:uppercase; letter-spacing:.08em; }
+
+    /* ── Footer ── */
+    .rpt-footer { text-align:center; margin-top:28px; padding-top:12px; border-top:1px solid #e5e7eb; font-size:9px; color:#aaa; letter-spacing:.05em; }
+
+    /* ── Loading / error states ── */
+    .rpt-loading { text-align:center; padding:80px 20px; color:var(--text-muted); }
+
+    /* ── Print overrides ── */
+    @media print {
+      body { background:#fff !important; }
+      .report-toolbar { display:none !important; }
+      .report-wrap { padding:0; max-width:100%; }
+      .report-doc { border:none; box-shadow:none; padding:20px 28px; border-radius:0; }
+      .rpt-title-bar { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      .rpt-result, .rpt-outcome, .rpt-disp-tag { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+      <div class="report-wrap">
+
+        <!-- Toolbar -->
+        <div class="report-toolbar" data-no-print>
+          <div class="report-toolbar-left">
+            <a href="javascript:history.back()" class="btn btn-ghost btn-sm">← Back</a>
+            <a id="edit-link" href="#" class="btn btn-ghost btn-sm">Edit Review</a>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-secondary" onclick="window.print()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:6px;"><polyline points="6,9 6,2 18,2 18,9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Print / Save PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- Report Document -->
+        <div class="report-doc" id="report-doc">
+          <div class="rpt-loading" id="rpt-loading">
+            <div class="spinner"></div>
+            <p style="margin-top:12px;">Loading report…</p>
+          </div>
+          <div id="rpt-content" style="display:none;"></div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({ requireAuth: true });
+  renderNav(profile, 'reviews');
+  renderTopbar('Review Report');
+
+  const reviewId = new URLSearchParams(window.location.search).get('id');
+  if (!reviewId) {
+    document.getElementById('rpt-loading').innerHTML = '<p style="color:var(--danger);">No review ID specified.</p>';
+    throw new Error('no_id');
+  }
+
+  document.getElementById('edit-link').href = `review-detail.html?id=${reviewId}`;
+
+  // ── Load all review data ─────────────────────────────────────
+  const { data: review, error } = await supabase
+    .from('bwc_reviews')
+    .select(`
+      *,
+      agency:agencies(name, logo_url),
+      primary_officer:personnel_roster!primary_officer_id(
+        first_name, last_name, badge_number, rank
+      ),
+      supervisor:profiles!reviewing_supervisor_id(full_name, email),
+      incident_type:incident_types(name)
+    `)
+    .eq('id', reviewId)
+    .single();
+
+  if (error || !review) {
+    document.getElementById('rpt-loading').innerHTML = '<p style="color:var(--danger);">Failed to load review.</p>';
+    throw error;
+  }
+
+  // Load KPI responses
+  let kpiRows = [];
+  if (review.kpi_responses && Object.keys(review.kpi_responses).length) {
+    const kpiIds = Object.keys(review.kpi_responses);
+    const { data: kpis } = await supabase
+      .from('kpi_definitions')
+      .select('id, kpi_text')
+      .in('id', kpiIds);
+    kpiRows = (kpis || []).map(k => ({
+      text: k.kpi_text,
+      result: review.kpi_responses[k.id]
+    }));
+  }
+
+  // Load safety checklist items
+  let safetyItems = [];
+  if (review.safety_checklist && Object.keys(review.safety_checklist).length) {
+    const checkedIds = Object.keys(review.safety_checklist).filter(k => review.safety_checklist[k]);
+    if (checkedIds.length) {
+      const { data: items } = await supabase
+        .from('safety_checklist_items')
+        .select('id, item_text, safety_category')
+        .in('id', checkedIds);
+      safetyItems = items || [];
+    }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────
+  function fmtDate(str) {
+    if (!str) return '—';
+    return new Date(str + 'T00:00:00').toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  }
+  function fmtTime(str) {
+    if (!str) return '—';
+    const [h, m] = str.split(':');
+    const d = new Date(); d.setHours(h, m);
+    return d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+  }
+  function outcomeLabel(o) {
+    const map = { no_action:'No Action', commendation:'Commendation', coaching:'Coaching / Counseling', training:'Training Required', internal_affairs:'IA Referral', pip:'PIP Initiated' };
+    return map[o] || o || '—';
+  }
+  function resultLabel(r) {
+    const map = { observed:'Observed', not_observed:'Not Observed', na:'N/A' };
+    return map[r] || r || '—';
+  }
+  function resultClass(r) {
+    if (r === 'observed')     return 'rpt-result-observed';
+    if (r === 'not_observed') return 'rpt-result-not';
+    return 'rpt-result-na';
+  }
+  function dispLabel(v) {
+    const map = {
+      arrest_made:'Arrest Made', citation_issued:'Citation Issued', verbal_warning:'Verbal Warning',
+      written_warning:'Written Warning', field_release:'Field Release', report_filed:'Report Filed',
+      citizen_assist:'Citizen Assist', transported_medical:'Transported — Medical', referred_other_agency:'Referred to Other Agency',
+      no_action_taken:'No Action Taken', other:'Other — See Notes'
+    };
+    return map[v] || v;
+  }
+
+  const agencyName   = review.agency?.name || 'Police Department';
+  const officerName  = review.primary_officer ? `${review.primary_officer.last_name}, ${review.primary_officer.first_name}` : '—';
+  const supervisorName = review.supervisor?.full_name || profile.full_name || '—';
+  const dispositions = review.disposition ? review.disposition.split(',').filter(Boolean) : [];
+  const address = [review.street, review.apt_suite, review.floor_number ? `Floor ${review.floor_number}` : null, review.city, review.state].filter(Boolean).join(', ') || '—';
+  const printDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+  // ── Render ───────────────────────────────────────────────────
+  document.getElementById('rpt-loading').style.display = 'none';
+  document.getElementById('rpt-content').style.display = 'block';
+
+  document.getElementById('rpt-content').innerHTML = `
+
+    <!-- HEADER -->
+    <div class="rpt-header">
+      <div class="rpt-logo-agency">
+        ${review.agency?.logo_url
+          ? `<img src="${review.agency.logo_url}" class="rpt-agency-img" alt="Agency Logo" onerror="this.style.display='none'">`
+          : `<div class="rpt-agency-placeholder">${agencyName.charAt(0)}</div>`}
+        <div>
+          <div class="rpt-agency-name">${agencyName}</div>
+          <div class="rpt-agency-sub">Body-Worn Camera Review Report</div>
+        </div>
+      </div>
+      <div class="rpt-atlas-logo">
+        <div class="rpt-atlas-wordmark">ATL<span>A</span>S</div>
+        <div class="rpt-atlas-sub">Performance Management System</div>
+        <img src="logo.png" alt="ATLAS" style="height:28px;margin-top:4px;" onerror="this.style.display='none'">
+      </div>
+    </div>
+
+    <!-- TITLE BAR -->
+    <div class="rpt-title-bar">
+      <h2>BWC Performance Review — Official Record</h2>
+      <span class="rpt-case-num">${review.atlas_case_number || 'PENDING'}</span>
+    </div>
+
+    <div class="rpt-confidential">CONFIDENTIAL — FOR INTERNAL USE ONLY — NOT FOR PUBLIC DISTRIBUTION</div>
+
+    <!-- SECTION 1: Review Information -->
+    <div class="rpt-section">
+      <div class="rpt-section-title">Review Information</div>
+      <div class="rpt-grid-3">
+        <div class="rpt-field">
+          <div class="rpt-field-label">ATLAS Case Number</div>
+          <div class="rpt-field-value mono">${review.atlas_case_number || '—'}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Agency Case / Report #</div>
+          <div class="rpt-field-value">${review.police_case_number || '—'}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Status</div>
+          <div class="rpt-field-value">${review.status ? review.status.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase()) : '—'}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Incident Date</div>
+          <div class="rpt-field-value">${fmtDate(review.incident_date)}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Review Date</div>
+          <div class="rpt-field-value">${fmtDate(review.review_date)}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Incident Type</div>
+          <div class="rpt-field-value">${review.incident_type?.name || '—'}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Recording Start</div>
+          <div class="rpt-field-value">${fmtTime(review.recording_start_time)}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Recording End</div>
+          <div class="rpt-field-value">${fmtTime(review.recording_end_time)}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Report Generated</div>
+          <div class="rpt-field-value">${printDate}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: Personnel -->
+    <div class="rpt-section">
+      <div class="rpt-section-title">Personnel</div>
+      <div class="rpt-grid-3">
+        <div class="rpt-field">
+          <div class="rpt-field-label">Officer (Primary)</div>
+          <div class="rpt-field-value">${officerName}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Badge Number</div>
+          <div class="rpt-field-value">${review.primary_officer?.badge_number || '—'}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Rank</div>
+          <div class="rpt-field-value">${review.primary_officer?.rank || '—'}</div>
+        </div>
+        <div class="rpt-field" style="grid-column:span 2;">
+          <div class="rpt-field-label">Reviewing Supervisor</div>
+          <div class="rpt-field-value">${supervisorName}</div>
+        </div>
+        <div class="rpt-field">
+          <div class="rpt-field-label">Agency</div>
+          <div class="rpt-field-value">${agencyName}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 3: Incident Location -->
+    <div class="rpt-section">
+      <div class="rpt-section-title">Incident Location</div>
+      <div class="rpt-grid-2">
+        <div class="rpt-field" style="grid-column:span 2;">
+          <div class="rpt-field-label">Address</div>
+          <div class="rpt-field-value">${address}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 4: KPI Assessment -->
+    ${kpiRows.length ? `
+    <div class="rpt-section">
+      <div class="rpt-section-title">Performance Assessment — KPI Results</div>
+      <table class="rpt-kpi-table">
+        <thead>
+          <tr>
+            <th style="width:65%;">Performance Indicator</th>
+            <th style="width:35%;">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${kpiRows.map(k => `
+            <tr>
+              <td>${k.text}</td>
+              <td><span class="rpt-result ${resultClass(k.result)}">${resultLabel(k.result)}</span></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}
+
+    <!-- SECTION 5: Officer Safety Deficiencies -->
+    ${safetyItems.length ? `
+    <div class="rpt-section">
+      <div class="rpt-section-title" style="color:#dc2626;border-color:#dc2626;">Officer Safety Deficiencies Observed</div>
+      <div style="background:#fff5f5;border:1px solid #fecaca;border-radius:4px;padding:10px 14px;">
+        ${safetyItems.map(item => `
+          <div class="rpt-safety-item">
+            <div class="rpt-safety-dot"></div>
+            <span>${item.item_text}</span>
+            ${item.safety_category ? `<span style="font-size:10px;color:#888;margin-left:auto;">${item.safety_category}</span>` : ''}
+          </div>`).join('')}
+      </div>
+    </div>` : `
+    <div class="rpt-section">
+      <div class="rpt-section-title">Officer Safety</div>
+      <div style="font-size:12px;color:#16a34a;font-weight:600;">✓ No officer safety deficiencies observed during this review.</div>
+    </div>`}
+
+    <!-- SECTION 6: Disposition -->
+    <div class="rpt-section">
+      <div class="rpt-section-title">Incident Disposition</div>
+      ${dispositions.length
+        ? `<div class="rpt-disp-tags">${dispositions.map(d => `<span class="rpt-disp-tag">${dispLabel(d)}</span>`).join('')}</div>`
+        : '<div style="font-size:12px;color:#888;">No disposition recorded.</div>'}
+    </div>
+
+    <!-- SECTION 7: Follow-Up Outcome -->
+    <div class="rpt-section">
+      <div class="rpt-section-title">Follow-Up Action & Outcome</div>
+      <div style="margin-bottom:10px;">
+        <span class="rpt-outcome rpt-outcome-${review.follow_up_outcome || 'no_action'}">${outcomeLabel(review.follow_up_outcome)}</span>
+      </div>
+      ${review.report_notes ? `
+        <div style="margin-top:12px;">
+          <div class="rpt-field-label" style="margin-bottom:6px;">Supervisor Notes / Narrative</div>
+          <div class="rpt-notes">${review.report_notes}</div>
+        </div>` : ''}
+      ${review.internal_notes ? `
+        <div style="margin-top:12px;">
+          <div class="rpt-field-label" style="margin-bottom:6px;">Internal Notes (Confidential)</div>
+          <div class="rpt-notes" style="background:#fffbeb;border-color:#fde68a;">${review.internal_notes}</div>
+        </div>` : ''}
+    </div>
+
+    <!-- SIGNATURE BLOCK -->
+    <div class="rpt-sig-grid">
+      <div>
+        <div class="rpt-sig-line"></div>
+        <div class="rpt-sig-label">Reviewing Supervisor</div>
+        <div style="font-size:11px;color:#1a1a2e;margin-top:2px;">${supervisorName}</div>
+      </div>
+      <div>
+        <div class="rpt-sig-line"></div>
+        <div class="rpt-sig-label">Command Approval</div>
+        <div style="font-size:11px;color:#888;margin-top:2px;">Signature / Date</div>
+      </div>
+      <div>
+        <div class="rpt-sig-line"></div>
+        <div class="rpt-sig-label">Officer Acknowledgment</div>
+        <div style="font-size:11px;color:#888;margin-top:2px;">Signature / Date</div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="rpt-footer">
+      Generated by ATLAS Performance Management System · ${agencyName} · ${printDate} ·
+      Case: ${review.atlas_case_number || 'DRAFT'} · CONFIDENTIAL
+    </div>
+  `;
+</script>
+</body>
+</html>
