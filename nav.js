@@ -85,7 +85,7 @@ function getNavItems(role) {
       reviewSection.items.push(reviewItems[0]);
     }
     // Only roles that conduct reviews see New Review
-    if (['super_admin','internal_affairs','training_bureau','supervisor'].includes(role)) {
+    if (['internal_affairs','training_bureau','supervisor'].includes(role)) {
       reviewSection.items.push(reviewItems[1]);
     }
     if (reviewSection.items.length) sections.push(reviewSection);

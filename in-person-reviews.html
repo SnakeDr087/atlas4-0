@@ -160,9 +160,10 @@
   async function loadOfficerOptions() {
     let q;
     if (['internal_affairs','training_bureau','super_admin'].includes(profile.role)) {
+      const ipAgencyId = profile.agency_id || new URLSearchParams(location.search).get('agency_id');
       q = supabase.from('personnel_roster')
         .select('id, first_name, last_name, badge_number')
-        .eq('agency_id', profile.agency_id).eq('officer_status','active').order('last_name');
+        .eq('agency_id', ipAgencyId).eq('officer_status','active').order('last_name');
     } else {
       q = supabase.from('supervisor_rosters')
         .select('officer:personnel_roster(id, first_name, last_name, badge_number)')

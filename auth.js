@@ -35,7 +35,7 @@ const ROLE_PERMISSIONS = {
   // Core — all authenticated roles
   'dashboard.html':        ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
   'reviews.html':          ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
-  'review-new.html':       ['super_admin','internal_affairs','training_bureau','supervisor'],
+  'review-new.html':       ['internal_affairs','training_bureau','supervisor'],
   'review-detail.html':    ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
   'auto-select.html':      ['super_admin','supervisor'],
   'officer-profile.html':  ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
@@ -129,20 +129,15 @@ export async function initAuth({ requireAuth = true, allowRoles = [] } = {}) {
 
   _currentUser = session.user;
 
-  // Fetch profile (cached after first load)
+  // Fetch profile (cached after first load) — agency decoupled from the
+  // profile read so agencies-table RLS can never block the core read.
   if (!_currentProfile) {
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*, agencies(name, state)')
-      .eq('id', _currentUser.id)
-      .single();
-
-    if (profileError || !profile) {
-      console.error('[ATLAS Auth] Profile fetch failed:', profileError?.message);
+    const profile = await loadProfile(_currentUser.id);
+    if (!profile) {
+      console.error('[ATLAS Auth] Profile fetch failed for user', _currentUser.id);
       await signOut();
       return { user: null, profile: null };
     }
-
     _currentProfile = profile;
   }
 
@@ -175,13 +170,9 @@ export async function signIn(email, password) {
 
   _currentUser = data.user;
 
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('*, agencies(name, state)')
-    .eq('id', _currentUser.id)
-    .single();
+  const profile = await loadProfile(_currentUser.id);
 
-  if (profileError || !profile) {
+  if (!profile) {
     return { profile: null, error: 'Account exists but profile not found. Contact your administrator.' };
   }
 
@@ -299,6 +290,48 @@ export function redirectToDashboard() {
 }
 
 // ── Internal helpers ─────────────────────────────────────────
+
+/**
+ * Load a profile by user id, decoupled from the agencies join.
+ *
+ * Reading the profile by itself means agencies-table RLS or a missing
+ * agency row can never block the core profile read — the most common
+ * cause of spurious "profile not found" errors. The agency is fetched
+ * separately and attached as profile.agencies (an object or null), so
+ * existing `profile.agencies?.name` usage keeps working unchanged.
+ *
+ * @returns {Promise<object|null>} the profile, or null if not readable
+ */
+async function loadProfile(userId) {
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[ATLAS Auth] profiles read error:', error.message);
+    return null;
+  }
+  if (!profile) {
+    console.error('[ATLAS Auth] No profile row visible for user', userId,
+      '— verify the profiles SELECT RLS policy allows self-read (id = auth.uid()).');
+    return null;
+  }
+
+  // Attach agency separately — never blocks the profile read.
+  profile.agencies = null;
+  if (profile.agency_id) {
+    const { data: agency } = await supabase
+      .from('agencies')
+      .select('name, state')
+      .eq('id', profile.agency_id)
+      .maybeSingle();
+    profile.agencies = agency || null;
+  }
+
+  return profile;
+}
 
 function getCurrentPage() {
   const path = window.location.pathname;

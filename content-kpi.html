@@ -78,13 +78,23 @@
   renderTopbar('Incident Types & KPIs');
 
   let selectedTypeId = null;
+  let selectedTypeName = '';
+  let editingTypeId = null;
+  // Super Admin curates the platform-wide (global) library; agency admins
+  // manage only their own agency's incident types and KPIs.
+  const canManageGlobals = profile.role === 'super_admin';
 
   async function loadTypes() {
-    const { data: types } = await supabase
+    let q = supabase
       .from('incident_types')
       .select('id, name, is_active, is_global_default, agency_id')
-      .or(`agency_id.eq.${profile.agency_id},is_global_default.eq.true`)
       .order('display_order');
+    if (canManageGlobals) {
+      q = q.eq('is_global_default', true);          // super admin curates globals
+    } else {
+      q = q.or(`agency_id.eq.${profile.agency_id},is_global_default.eq.true`);
+    }
+    const { data: types } = await q;
 
     document.getElementById('type-loading').style.display = 'none';
     document.getElementById('type-list').style.display = 'block';
@@ -96,7 +106,7 @@
            id="type-row-${t.id}"
            onclick="selectType('${t.id}', '${escHtml(t.name)}', ${t.is_global_default}, '${t.agency_id || ''}')">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:${t.id === selectedTypeId ? '600' : '500'};
+          <div id="type-name-${t.id}" style="font-size:13px;font-weight:${t.id === selectedTypeId ? '600' : '500'};
                color:${t.is_active ? 'var(--text-primary)' : 'var(--text-muted)'};">
             ${escHtml(t.name)}
           </div>
@@ -105,7 +115,9 @@
             ${!t.is_active ? ' · Inactive' : ''}
           </div>
         </div>
-        ${!t.is_global_default ? `
+        ${(!t.is_global_default || canManageGlobals) ? `
+          <button onclick="event.stopPropagation();editType('${t.id}')"
+                  class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px;">Rename</button>
           <button onclick="event.stopPropagation();toggleType('${t.id}', ${t.is_active})"
                   class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px;">
             ${t.is_active ? 'Hide' : 'Show'}
@@ -119,6 +131,7 @@
 
   window.selectType = async function(typeId, typeName, isGlobal, agencyId) {
     selectedTypeId = typeId;
+    selectedTypeName = typeName;
     await loadTypes(); // re-render to highlight selection
 
     const panel = document.getElementById('kpi-panel');
@@ -147,11 +160,11 @@
         ${(kpis || []).map((k, i) => `
           <div style="display:flex;align-items:center;gap:10px;padding:10px 0;
                border-bottom:1px solid var(--border-subtle);" id="kpi-row-${k.id}">
-            <div style="font-size:13px;color:var(--text-secondary);flex:1;">${escHtml(k.kpi_text)}</div>
-            ${k.is_global_default
-              ? `<button onclick="suppressKpi('${k.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--text-muted);">Hide</button>
-                 <span style="font-size:10px;color:var(--text-muted);margin-left:4px;">Global</span>`
-              : `<button onclick="deleteKpi('${k.id}')" class="btn btn-danger btn-sm" style="font-size:10px;">Delete</button>`}
+            <div id="kpi-text-${k.id}" style="font-size:13px;color:var(--text-secondary);flex:1;">${escHtml(k.kpi_text)}</div>
+            ${(!k.is_global_default || canManageGlobals)
+              ? `<button onclick="editKpi('${k.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;">Edit</button>
+                 <button onclick="deleteKpi('${k.id}')" class="btn btn-danger btn-sm" style="font-size:10px;">Delete</button>`
+              : `<span style="font-size:10px;color:var(--text-muted);">Global</span>`}
           </div>`).join('') || '<div style="color:var(--text-muted);font-size:13px;padding:12px 0;">No KPIs defined for this type.</div>'}
       </div>
       <div id="add-kpi-form" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
@@ -175,42 +188,58 @@
     const text = document.getElementById('new-kpi-text').value.trim();
     if (!text) return;
     const { data: existing } = await supabase.from('kpi_definitions')
-      .select('display_order').eq('incident_type_id', typeId).order('display_order', { ascending: false }).limit(1).single();
+      .select('display_order').eq('incident_type_id', typeId)
+      .order('display_order', { ascending: false }).limit(1).maybeSingle();
     const nextOrder = (existing?.display_order || 0) + 1;
     const { error } = await supabase.from('kpi_definitions').insert({
-      agency_id: profile.agency_id, incident_type_id: typeId,
-      kpi_text: text, display_order: nextOrder
+      agency_id: canManageGlobals ? null : profile.agency_id,
+      incident_type_id: typeId,
+      kpi_text: text,
+      display_order: nextOrder,
+      is_global_default: canManageGlobals
     });
     if (error) { showToast('error', 'Failed', error.message); return; }
     showToast('success', 'KPI added');
-    await selectType(typeId, '', false, profile.agency_id);
+    await refreshKpis();
   };
 
-  // Hard delete agency-specific KPI
+  // Edit KPI text (inline)
+  window.editKpi = function(kpiId) {
+    const el = document.getElementById(`kpi-text-${kpiId}`);
+    if (!el) return;
+    const current = el.textContent.trim();
+    el.innerHTML = `
+      <input type="text" id="kpi-edit-${kpiId}" value="${escAttr(current)}"
+             style="width:100%;background:var(--bg-base);border:1px solid var(--border-focus);
+             border-radius:var(--border-radius);padding:6px 8px;color:var(--text-primary);">
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button class="btn btn-primary btn-sm" onclick="saveKpiEdit('${kpiId}')">Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="refreshKpis()">Cancel</button>
+      </div>`;
+    document.getElementById(`kpi-edit-${kpiId}`).focus();
+  };
+
+  window.saveKpiEdit = async function(kpiId) {
+    const text = document.getElementById(`kpi-edit-${kpiId}`).value.trim();
+    if (!text) return;
+    const { error } = await supabase.from('kpi_definitions').update({ kpi_text: text }).eq('id', kpiId);
+    if (error) { showToast('error', 'Update failed', error.message); return; }
+    showToast('success', 'KPI updated');
+    await refreshKpis();
+  };
+
+  // Hard delete an agency-specific KPI (or, for super admin, a global KPI)
   window.deleteKpi = async function(kpiId) {
     if (!confirm('Delete this KPI? This cannot be undone.')) return;
     const { error } = await supabase.from('kpi_definitions').delete().eq('id', kpiId);
     if (error) { showToast('error', 'Delete failed', error.message); return; }
     showToast('success', 'KPI deleted');
-    if (selectedTypeId) {
-      const { data: t } = await supabase.from('incident_types').select('name').eq('id', selectedTypeId).single();
-      await selectType(selectedTypeId, t?.name || '', false, profile.agency_id);
-    }
+    await refreshKpis();
   };
 
-  // Suppress global KPI for this agency (adds to suppressed_for_agencies array)
-  window.suppressKpi = async function(kpiId) {
-    if (!confirm('Hide this global KPI for your agency? You can restore it via the database.')) return;
-    const { error } = await supabase.from('kpi_definitions')
-      .update({ suppressed_for_agencies: supabase.rpc('array_append', { arr: 'suppressed_for_agencies', val: profile.agency_id }) })
-      .eq('id', kpiId);
-    // Fallback: just set inactive for this context
-    await supabase.from('kpi_definitions').update({ is_active: false }).eq('id', kpiId).eq('is_global_default', false);
-    showToast('success', 'KPI hidden');
-    if (selectedTypeId) {
-      const { data: t } = await supabase.from('incident_types').select('name').eq('id', selectedTypeId).single();
-      await selectType(selectedTypeId, t?.name || '', false, profile.agency_id);
-    }
+  // Re-render the KPI panel for the currently selected type
+  window.refreshKpis = async function() {
+    if (selectedTypeId) await selectType(selectedTypeId, selectedTypeName, false, profile.agency_id);
   };
 
   window.toggleType = async function(typeId, isActive) {
@@ -236,15 +265,45 @@
     showToast('success', 'Incident type deleted');
   };
 
-  // Add incident type
-  document.getElementById('add-type-btn').addEventListener('click', () =>
-    document.getElementById('type-modal').classList.add('open'));
+  // Add incident type — reset to "create" mode then open modal
+  document.getElementById('add-type-btn').addEventListener('click', () => {
+    editingTypeId = null;
+    document.querySelector('#type-modal .modal-title').textContent = 'Add Incident Type';
+    document.getElementById('type-name').value = '';
+    document.getElementById('type-modal').classList.add('open');
+    document.getElementById('type-name').focus();
+  });
+
+  // Rename incident type — open the same modal in "edit" mode
+  window.editType = function(typeId) {
+    const nameEl = document.getElementById(`type-name-${typeId}`);
+    editingTypeId = typeId;
+    document.querySelector('#type-modal .modal-title').textContent = 'Rename Incident Type';
+    document.getElementById('type-name').value = nameEl ? nameEl.textContent.trim() : '';
+    document.getElementById('type-modal').classList.add('open');
+    document.getElementById('type-name').focus();
+  };
 
   document.getElementById('save-type-btn').addEventListener('click', async () => {
     const name = document.getElementById('type-name').value.trim();
     if (!name) return;
+
+    if (editingTypeId) {
+      const { error } = await supabase.from('incident_types').update({ name }).eq('id', editingTypeId);
+      if (error) { showToast('error', 'Failed', error.message); return; }
+      window.closeTypeModal();
+      showToast('success', 'Incident type renamed');
+      await loadTypes();
+      return;
+    }
+
+    const { data: last } = await supabase.from('incident_types')
+      .select('display_order').order('display_order', { ascending: false }).limit(1).maybeSingle();
     const { error } = await supabase.from('incident_types').insert({
-      agency_id: profile.agency_id, name, is_active: true
+      agency_id: canManageGlobals ? null : profile.agency_id,
+      name, is_active: true,
+      is_global_default: canManageGlobals,
+      display_order: (last?.display_order || 0) + 1
     });
     if (error) { showToast('error', 'Failed', error.message); return; }
     window.closeTypeModal();
@@ -255,10 +314,16 @@
   window.closeTypeModal = () => {
     document.getElementById('type-modal').classList.remove('open');
     document.getElementById('type-name').value = '';
+    editingTypeId = null;
+    document.querySelector('#type-modal .modal-title').textContent = 'Add Incident Type';
   };
 
   function escHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function escAttr(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
   function showToast(type, title, body = '') {

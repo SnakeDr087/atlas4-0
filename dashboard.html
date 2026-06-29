@@ -516,7 +516,7 @@
   // ════════════════════════════════════════════════════════════
   async function renderAgencyAdmin() {
     document.getElementById('dash-subtitle').textContent = `${profile.agencies?.name||''} · Agency administration`;
-    document.getElementById('dash-actions').innerHTML = `<a href="review-new.html" class="btn btn-primary">+ New Review</a>`;
+    document.getElementById('dash-actions').innerHTML = `<a href="roster.html" class="btn btn-primary">Manage Roster</a>`;
 
     const [usersRes, officersRes, ranksRes, kpisRes] = await Promise.all([
       supabase.from('profiles').select('id',{count:'exact',head:true}).eq('agency_id',agencyId),
@@ -566,13 +566,14 @@
       supabase.from('bwc_reviews').select('id,officer_id,incident_date,overall_score,status,created_at')
         .eq('agency_id',agencyId).eq('reviewing_supervisor_id',profile.id)
         .order('created_at',{ascending:false}).limit(10),
-      supabase.from('personnel_roster').select('id,first_name,last_name,badge_number,performance_score')
-        .eq('agency_id',agencyId).eq('officer_status','active').eq('supervisor_id',profile.id),
+      supabase.from('supervisor_rosters')
+        .select('officer:personnel_roster(id,first_name,last_name,badge_number,performance_score,officer_status)')
+        .eq('supervisor_id',profile.id),
       supabase.from('delta_t_cases').select('id,officer_id,status,created_at,is_overdue_flagged')
         .eq('agency_id',agencyId).eq('supervisor_id',profile.id).neq('status','closed'),
     ]);
 
-    const officers = officersRes.data||[];
+    const officers = (officersRes.data||[]).map(r=>r.officer).filter(o=>o && o.officer_status==='active');
     const reviews  = reviewsRes.data||[];
     const dtCases  = dtRes.data||[];
     const oMap = {}; officers.forEach(o=>{oMap[o.id]=o;});

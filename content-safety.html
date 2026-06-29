@@ -55,18 +55,29 @@
   renderNav(profile, 'content-safety');
   renderTopbar('Safety Checklist');
 
+  // Super Admin curates the platform-wide (global) safety items; agency
+  // admins manage only their own agency's items.
+  const canManageGlobals = profile.role === 'super_admin';
+
   async function loadItems() {
-    const { data: items } = await supabase
+    let q = supabase
       .from('safety_checklist_items')
-      .select('id, item_text, is_active, display_order')
-      .or(`agency_id.eq.${profile.agency_id},agency_id.is.null`)
+      .select('id, item_text, is_active, display_order, agency_id')
       .order('display_order');
+    if (canManageGlobals) {
+      q = q.is('agency_id', null);                  // super admin curates globals
+    } else {
+      q = q.or(`agency_id.eq.${profile.agency_id},agency_id.is.null`);
+    }
+    const { data: items } = await q;
 
     document.getElementById('items-loading').style.display = 'none';
     document.getElementById('items-list').style.display = 'block';
 
     document.getElementById('items-list').innerHTML = (items || []).length
-      ? (items || []).map((item, i) => `
+      ? (items || []).map((item, i) => {
+          const canEdit = item.agency_id !== null || canManageGlobals;
+          return `
           <div style="display:flex;align-items:center;gap:12px;padding:12px 0;
                border-bottom:1px solid var(--border-subtle);opacity:${item.is_active ? 1 : 0.5};"
                id="item-row-${item.id}">
@@ -76,13 +87,16 @@
             <div style="flex:1;font-size:13px;color:var(--text-secondary);" id="item-text-${item.id}">
               ${escHtml(item.item_text)}
             </div>
+            ${canEdit ? `
             <div style="display:flex;gap:6px;">
-              <button class="btn btn-ghost btn-sm" onclick="editItem('${item.id}', '${escHtml(item.item_text)}')">Edit</button>
+              <button class="btn btn-ghost btn-sm" onclick="editItem('${item.id}')">Edit</button>
               <button class="btn btn-ghost btn-sm" onclick="toggleItem('${item.id}', ${item.is_active})">
                 ${item.is_active ? 'Deactivate' : 'Activate'}
               </button>
-            </div>
-          </div>`).join('')
+              <button class="btn btn-danger btn-sm" onclick="deleteItem('${item.id}')">Delete</button>
+            </div>` : `<span style="font-size:11px;color:var(--text-muted);">Global</span>`}
+          </div>`;
+        }).join('')
       : '<div style="color:var(--text-muted);font-size:13px;padding:16px 0;">No checklist items yet. Add some above.</div>';
   }
 
@@ -99,10 +113,11 @@
     const text = document.getElementById('new-item-text').value.trim();
     if (!text) return;
     const { data: last } = await supabase.from('safety_checklist_items')
-      .select('display_order').eq('agency_id', profile.agency_id)
-      .order('display_order', { ascending: false }).limit(1).single();
+      .select('display_order')
+      .order('display_order', { ascending: false }).limit(1).maybeSingle();
     const { error } = await supabase.from('safety_checklist_items').insert({
-      agency_id: profile.agency_id, item_text: text,
+      agency_id: canManageGlobals ? null : profile.agency_id,
+      item_text: text,
       display_order: (last?.display_order || 0) + 1
     });
     if (error) { showToast('error', 'Failed', error.message); return; }
@@ -112,16 +127,19 @@
     await loadItems();
   });
 
-  window.editItem = function(itemId, currentText) {
+  window.editItem = function(itemId) {
     const textEl = document.getElementById(`item-text-${itemId}`);
+    if (!textEl) return;
+    const current = textEl.textContent.trim();
     textEl.innerHTML = `
-      <input type="text" value="${currentText}" id="edit-input-${itemId}"
+      <input type="text" value="${escAttr(current)}" id="edit-input-${itemId}"
              style="width:100%;background:var(--bg-base);border:1px solid var(--border-focus);
              border-radius:var(--border-radius);padding:6px 8px;color:var(--text-primary);">
       <div style="display:flex;gap:6px;margin-top:6px;">
         <button class="btn btn-primary btn-sm" onclick="saveEdit('${itemId}')">Save</button>
         <button class="btn btn-ghost btn-sm" onclick="loadItems()">Cancel</button>
       </div>`;
+    document.getElementById(`edit-input-${itemId}`).focus();
   };
 
   window.saveEdit = async function(itemId) {
@@ -129,6 +147,30 @@
     if (!text) return;
     await supabase.from('safety_checklist_items').update({ item_text: text }).eq('id', itemId);
     showToast('success', 'Item updated');
+    await loadItems();
+  };
+
+  // Hard delete — but only if no historical review references this item,
+  // otherwise those reviews would show an answer with no question. The
+  // usage check fails closed: if it can't be verified, deletion is blocked.
+  window.deleteItem = async function(itemId) {
+    const { data: inUse, error: useErr } = await supabase
+      .from('bwc_reviews')
+      .select('id')
+      .not(`safety_checklist->>${itemId}`, 'is', null)
+      .limit(1);
+    if (useErr) {
+      showToast('error', 'Could not verify usage', 'Deletion blocked. Deactivate the item instead.');
+      return;
+    }
+    if (inUse && inUse.length) {
+      showToast('error', 'Item in use', 'This item appears on existing reviews. Deactivate it instead of deleting.');
+      return;
+    }
+    if (!confirm('Delete this safety item? This cannot be undone.')) return;
+    const { error } = await supabase.from('safety_checklist_items').delete().eq('id', itemId);
+    if (error) { showToast('error', 'Delete failed', error.message); return; }
+    showToast('success', 'Item deleted');
     await loadItems();
   };
 
@@ -140,6 +182,10 @@
 
   function escHtml(str) {
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');
+  }
+
+  function escAttr(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
   function showToast(type, title) {

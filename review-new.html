@@ -267,9 +267,7 @@
               <label>Primary Officer <span class="required">*</span>
                 <span style="font-size:11px;color:var(--text-muted);">— officer being evaluated</span>
               </label>
-              <select id="primary-officer" required>
-                <option value="">— Select officer —</option>
-              </select>
+              <div id="primary-officer-search"></div>
               <div class="form-error visible" id="officer-error" style="display:none;">Please select the primary officer.</div>
             </div>
             <div class="form-group">
@@ -794,10 +792,14 @@ class OfficerSearch {
 
   const { profile } = await initAuth({
     requireAuth: true,
-    allowRoles: ['super_admin','internal_affairs','training_bureau','supervisor']
+    allowRoles: ['internal_affairs','training_bureau','supervisor']
   });
   renderNav(profile, 'review-new');
   renderTopbar('New Review');
+
+  // Agency this review belongs to. For scoped users this is their own agency.
+  // For a NULL-agency user (super_admin) it falls back to ?agency_id= in the URL.
+  const reviewAgencyId = profile.agency_id || new URLSearchParams(location.search).get('agency_id');
 
   // ── State ───────────────────────────────────────────────
   let kpiResponses   = {};   // { kpi_id: 'observed'|'not_observed'|'na' }
@@ -825,7 +827,7 @@ class OfficerSearch {
       query = supabase
         .from('personnel_roster')
         .select('id, first_name, last_name, badge_number')
-        .eq('agency_id', profile.agency_id)
+        .eq('agency_id', reviewAgencyId)
         .eq('officer_status', 'active')
         .order('last_name');
     } else {
@@ -852,7 +854,7 @@ class OfficerSearch {
     window._primaryOfficerSearch = new OfficerSearch({
       container:    document.getElementById('primary-officer-search'),
       supabase:     supabase,
-      agencyId:     profile.agency_id,
+      agencyId:     reviewAgencyId,
       supervisorId: profile.role === 'supervisor' ? profile.id : null,
       placeholder:  'Search officer name or badge #…',
       onSelect:     () => { document.getElementById('officer-error').style.display = 'none'; }
@@ -862,7 +864,7 @@ class OfficerSearch {
     window._backupSearch = new OfficerSearch({
       container:    document.getElementById('backup-officer-search'),
       supabase:     supabase,
-      agencyId:     profile.agency_id,
+      agencyId:     reviewAgencyId,
       supervisorId: profile.role === 'supervisor' ? profile.id : null,
       placeholder:  'Search backup officer…',
       onSelect:     null
@@ -874,7 +876,7 @@ class OfficerSearch {
     const { data } = await supabase
       .from('incident_types')
       .select('id, name')
-      .or(`agency_id.eq.${profile.agency_id},is_global_default.eq.true`)
+      .or(`agency_id.eq.${reviewAgencyId},is_global_default.eq.true`)
       .eq('is_active', true)
       .order('display_order');
 
@@ -917,7 +919,7 @@ class OfficerSearch {
     }
 
     // Safety checklist — always load
-    const agencyId = profile?.agency_id;
+    const agencyId = reviewAgencyId;
     if (agencyId) {
       const { data: safetyItems } = await supabase
         .from('safety_checklist_items')
@@ -1009,7 +1011,7 @@ class OfficerSearch {
 
     // Only show global defaults + this agency's KPIs
     const kpis = (allKpis || []).filter(k =>
-      k.is_global_default || k.agency_id === profile.agency_id
+      k.is_global_default || k.agency_id === reviewAgencyId
     );
 
     if (!kpis?.length) {
@@ -1058,7 +1060,7 @@ class OfficerSearch {
     const { data } = await supabase
       .from('safety_checklist_items')
       .select('id, item_text')
-      .eq('agency_id', profile.agency_id)
+      .eq('agency_id', reviewAgencyId)
       .eq('officer_status', 'active')
       .order('display_order');
 
@@ -1181,7 +1183,7 @@ class OfficerSearch {
   function buildPayload(status) {
     const outcome = document.querySelector('input[name=outcome]:checked')?.value;
     return {
-      agency_id:               profile.agency_id,
+      agency_id:               reviewAgencyId,
       reviewing_supervisor_id: profile.id,
       primary_officer_id:      window._primaryOfficerSearch?.getValue() || null,
       backup_officer_ids:      backupOfficerIds.length ? backupOfficerIds : null,
@@ -1247,7 +1249,7 @@ class OfficerSearch {
     // Handle IA case creation
     if (review.follow_up_outcome === 'internal_affairs' && status === 'approved') {
       await supabase.from('ia_cases').insert({
-        agency_id:               profile.agency_id,
+        agency_id:               reviewAgencyId,
         source_review_id:        review.id,
         submitting_supervisor_id: profile.id,
         officer_id:              payload.primary_officer_id
@@ -1258,7 +1260,7 @@ class OfficerSearch {
     // Handle PIP creation
     if (review.follow_up_outcome === 'pip' && status === 'approved') {
       await supabase.from('pips').insert({
-        agency_id:              profile.agency_id,
+        agency_id:              reviewAgencyId,
         officer_id:             payload.primary_officer_id,
         creating_supervisor_id: profile.id,
         source_review_id:       review.id
@@ -1267,7 +1269,7 @@ class OfficerSearch {
 
     // Activity log
     await supabase.from('activity_log').insert({
-      agency_id:   profile.agency_id,
+      agency_id:   reviewAgencyId,
       actor_id:    profile.id,
       action:      status === 'approved' ? 'review_submitted' : 'review_draft_saved',
       target_type: 'bwc_review',
