@@ -621,16 +621,23 @@ class OfficerSearch {
 
   async _loadOfficers() {
     try {
-      // Officer pickers ALWAYS load the full agency roster (every role, every page).
-      // Supervisor "own roster" (supervisor_rosters) drives Auto Select + dashboard
-      // scope only — never the selection dropdowns. See Access Separation Map.
-      const { data: rows } = await this._supabase
-        .from('personnel_roster')
-        .select('id, first_name, last_name, badge_number, rank')
-        .eq('agency_id', this._agencyId)
-        .eq('officer_status', 'active')
-        .order('last_name');
-      this._officers = rows || [];
+      let data = [];
+      if (this._supervisorId) {
+        const { data: rows } = await this._supabase
+          .from('supervisor_rosters')
+          .select('officer:personnel_roster(id, first_name, last_name, badge_number, rank)')
+          .eq('supervisor_id', this._supervisorId);
+        data = (rows || []).map(r => r.officer).filter(Boolean);
+      } else {
+        const { data: rows } = await this._supabase
+          .from('personnel_roster')
+          .select('id, first_name, last_name, badge_number, rank')
+          .eq('agency_id', this._agencyId)
+          .eq('officer_status', 'active')
+          .order('last_name');
+        data = rows || [];
+      }
+      this._officers = data;
     } catch(e) {
       console.error('[OfficerSearch] Load error:', e);
     }
@@ -787,7 +794,7 @@ class OfficerSearch {
 
   const { profile } = await initAuth({
     requireAuth: true,
-    allowRoles: ['internal_affairs','training_bureau','agency_admin','supervisor']
+    allowRoles: ['super_admin','internal_affairs','training_bureau','supervisor']
   });
   renderNav(profile, 'review-new');
   renderTopbar('New Review');
@@ -812,17 +819,29 @@ class OfficerSearch {
 
   // ── Load officer roster ─────────────────────────────────
   async function loadOfficers() {
-    // Officer pickers ALWAYS use the full agency roster, every role. Supervisor's
-    // own roster (supervisor_rosters) is for Auto Select + dashboard scope only.
-    const { data, error } = await supabase
-      .from('personnel_roster')
-      .select('id, first_name, last_name, badge_number')
-      .eq('agency_id', profile.agency_id)
-      .eq('officer_status', 'active')
-      .order('last_name');
+    let query;
+    if (['internal_affairs','training_bureau','super_admin'].includes(profile.role)) {
+      // Full agency roster
+      query = supabase
+        .from('personnel_roster')
+        .select('id, first_name, last_name, badge_number')
+        .eq('agency_id', profile.agency_id)
+        .eq('officer_status', 'active')
+        .order('last_name');
+    } else {
+      // Supervisor's own roster only
+      query = supabase
+        .from('supervisor_rosters')
+        .select('officer:personnel_roster(id, first_name, last_name, badge_number)')
+        .eq('supervisor_id', profile.id);
+    }
+
+    const { data, error } = await query;
     if (error) return;
 
-    const officers = data || [];
+    const officers = profile.role === 'supervisor'
+      ? (data || []).map(r => r.officer).filter(Boolean)
+      : (data || []);
 
     // Cache all officer names for backup tags display
     officers.forEach(o => {
@@ -834,6 +853,7 @@ class OfficerSearch {
       container:    document.getElementById('primary-officer-search'),
       supabase:     supabase,
       agencyId:     profile.agency_id,
+      supervisorId: profile.role === 'supervisor' ? profile.id : null,
       placeholder:  'Search officer name or badge #…',
       onSelect:     () => { document.getElementById('officer-error').style.display = 'none'; }
     });
@@ -843,6 +863,7 @@ class OfficerSearch {
       container:    document.getElementById('backup-officer-search'),
       supabase:     supabase,
       agencyId:     profile.agency_id,
+      supervisorId: profile.role === 'supervisor' ? profile.id : null,
       placeholder:  'Search backup officer…',
       onSelect:     null
     });

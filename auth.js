@@ -32,34 +32,34 @@ const ROLE_PERMISSIONS = {
   'forgot-password.html':  ['*'],
   'reset-password.html':   ['*'],
 
-  // Core
+  // Core — all authenticated roles
   'dashboard.html':        ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
-  'reviews.html':          ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
-  'review-new.html':       ['internal_affairs','training_bureau','agency_admin','supervisor'],
-  'review-detail.html':    ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
-  'auto-select.html':      ['agency_admin','supervisor'],
-  'officer-profile.html':  ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
-  'delta-t.html':          ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
-  'search.html':           ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
-  'reports.html':          ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
+  'reviews.html':          ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
+  'review-new.html':       ['super_admin','internal_affairs','training_bureau','supervisor'],
+  'review-detail.html':    ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
+  'auto-select.html':      ['super_admin','supervisor'],
+  'officer-profile.html':  ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
+  'delta-t.html':          ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
+  'search.html':           ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
+  'reports.html':          ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
 
-  // Restricted (IA: no training_bureau, no supervisor)
-  'ia-cases.html':         ['super_admin','chief','internal_affairs','agency_admin'],
-  'ia-case-detail.html':   ['super_admin','chief','internal_affairs','agency_admin'],
-  'pips.html':             ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
-  'pip-detail.html':       ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
+  // Restricted
+  'ia-cases.html':         ['super_admin','chief','internal_affairs','training_bureau'],
+  'ia-case-detail.html':   ['super_admin','chief','internal_affairs','training_bureau'],
+  'pips.html':             ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
+  'pip-detail.html':       ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
 
-  // Administration (super_admin may VIEW admin.html during oversight)
-  'admin.html':            ['super_admin','chief','agency_admin'],
-  'agency-settings.html':  ['super_admin','chief','agency_admin'],
-  'roster.html':           ['super_admin','chief','agency_admin','supervisor'],
-  'access-requests.html':  ['super_admin','chief','agency_admin'],
-  'tickets.html':          ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
+  // Administration
+  'admin.html':            ['super_admin','agency_admin'],
+  'agency-settings.html':  ['super_admin','agency_admin'],
+  'roster.html':           ['super_admin','agency_admin','supervisor'],
+  'access-requests.html':  ['super_admin','agency_admin'],
+  'tickets.html':          ['super_admin','agency_admin'],
 
   // Content management
-  'content-kpi.html':      ['super_admin','chief','agency_admin'],
-  'content-safety.html':   ['super_admin','chief','agency_admin'],
-  'content-ranks.html':    ['super_admin','chief','agency_admin']
+  'content-kpi.html':      ['super_admin','agency_admin'],
+  'content-safety.html':   ['super_admin','agency_admin'],
+  'content-ranks.html':    ['super_admin','agency_admin']
 };
 
 // ── In-memory session cache ──────────────────────────────────
