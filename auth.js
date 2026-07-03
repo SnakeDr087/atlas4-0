@@ -35,7 +35,7 @@ const ROLE_PERMISSIONS = {
   // Core — all authenticated roles
   'dashboard.html':        ['super_admin','chief','internal_affairs','training_bureau','agency_admin','supervisor'],
   'reviews.html':          ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
-  'review-new.html':       ['internal_affairs','training_bureau','supervisor'],
+  'review-new.html':       ['agency_admin','internal_affairs','training_bureau','supervisor'],
   'review-detail.html':    ['super_admin','chief','internal_affairs','training_bureau','supervisor'],
   'auto-select.html':      ['super_admin','supervisor'],
   'officer-profile.html':  ['super_admin','chief','internal_affairs','training_bureau','supervisor'],

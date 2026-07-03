@@ -516,44 +516,122 @@
   // ════════════════════════════════════════════════════════════
   async function renderAgencyAdmin() {
     document.getElementById('dash-subtitle').textContent = `${profile.agencies?.name||''} · Agency administration`;
-    document.getElementById('dash-actions').innerHTML = `<a href="roster.html" class="btn btn-primary">Manage Roster</a>`;
+    document.getElementById('dash-actions').innerHTML =
+      `<a href="review-new.html" class="btn btn-primary">+ New Review</a>
+       <a href="roster.html" class="btn btn-secondary" style="margin-left:8px;">Manage Roster</a>`;
 
-    const [usersRes, officersRes, ranksRes, kpisRes] = await Promise.all([
-      supabase.from('profiles').select('id',{count:'exact',head:true}).eq('agency_id',agencyId),
+    const [reviewsRes, dtActiveRes, dtOverdueRes, officersRes] = await Promise.all([
+      supabase.from('bwc_reviews')
+        .select(`id, primary_officer_id, incident_date, overall_score, status, follow_up_outcome, created_at,
+                 incident_type:incident_types(name),
+                 officer:personnel_roster!primary_officer_id(first_name,last_name)`)
+        .eq('agency_id', agencyId)
+        .order('created_at', { ascending:false }),
+      supabase.from('delta_t_cases').select('id',{count:'exact',head:true}).eq('agency_id',agencyId).neq('status','closed'),
+      supabase.from('delta_t_cases').select('id',{count:'exact',head:true}).eq('agency_id',agencyId).eq('is_overdue_flagged',true).neq('status','closed'),
       supabase.from('personnel_roster').select('id',{count:'exact',head:true}).eq('agency_id',agencyId),
-      supabase.from('agency_ranks').select('id').eq('agency_id',agencyId).limit(1),
-      supabase.from('kpi_definitions').select('id').eq('agency_id',agencyId).eq('is_active',true).limit(1),
     ]);
 
-    const checks = [
-      { label:'Ranks configured',          done:(ranksRes.data||[]).length>0,  link:'content-ranks.html' },
-      { label:'KPIs configured',           done:(kpisRes.data||[]).length>0,   link:'content-kpi.html' },
-      { label:'Officers added to roster',  done:(officersRes.count||0)>0,      link:'roster.html' },
-    ];
+    // Normalize reviews for client-side filtering
+    aaReviews = (reviewsRes.data || []).map(r => ({
+      id:        r.id,
+      officer:   r.officer ? `${r.officer.last_name}, ${r.officer.first_name}` : 'Unknown',
+      officerId: r.primary_officer_id || '',
+      type:      r.incident_type?.name || '—',
+      date:      r.incident_date || (r.created_at ? r.created_at.slice(0,10) : ''),
+      score:     r.overall_score,
+      followUp:  r.follow_up_outcome || '',
+      status:    r.status
+    }));
+
+    const dtActive     = dtActiveRes.count || 0;
+    const dtOverdue    = dtOverdueRes.count || 0;
+    const officerCount = officersRes.count || 0;
+
+    // Options for filter dropdowns, derived from the reviews on file
+    const officerOpts = [...new Map(aaReviews.filter(r=>r.officerId).map(r=>[r.officerId, r.officer])).entries()]
+      .sort((a,b)=>a[1].localeCompare(b[1]));
+    const typeOpts = [...new Set(aaReviews.map(r=>r.type).filter(t=>t && t!=='—'))].sort();
+    const FU = fuLabels();
+    const inp = 'background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--border-radius);padding:6px 8px;color:var(--text-primary);font-size:13px;';
+    const lbl = 'display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:3px;';
 
     document.getElementById('role-dashboard').innerHTML = `
       <div class="stats-grid">
-        ${sCard('info','👥',usersRes.count||0,'Platform Users')}
-        ${sCard('accent','🚔',officersRes.count||0,'Officers on Roster')}
-        ${sCard(checks.every(c=>c.done)?'accent':'warning','✅',`${checks.filter(c=>c.done).length}/${checks.length}`,'Setup Complete')}
+        ${sCard('accent','📋',aaReviews.length,'Total Reviews')}
+        ${sCard('warning','⏱️',dtActive,'Active Delta T',dtActive>0)}
+        ${sCard('danger','🚩',dtOverdue,'Overdue Delta T',dtOverdue>0)}
+        ${sCard('info','🚔',officerCount,'Officers on Roster')}
       </div>
+
       <div class="card">
-        <div class="card-header"><div class="card-title">Setup Checklist</div></div>
-        ${checks.map(c=>`<div style="display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border);">
-          <div style="width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;background:${c.done?'#d1fae5':'#fee2e2'};color:${c.done?'#065f46':'#991b1b'};">${c.done?'✓':'!'}</div>
-          <div style="flex:1;font-weight:500;">${c.label}</div>
-          ${!c.done?`<a href="${c.link}" style="font-size:13px;color:var(--primary);">Set up →</a>`:'<span style="font-size:12px;color:#16a34a;">Done</span>'}
-        </div>`).join('')}
+        <div class="card-header">
+          <div class="card-title">Review Records</div>
+          <a href="reports.html" class="btn btn-ghost btn-sm">Reports</a>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);align-items:end;">
+          <div><label style="${lbl}">From</label><input type="date" id="aa-from" onchange="aaFilter()" style="${inp}"></div>
+          <div><label style="${lbl}">To</label><input type="date" id="aa-to" onchange="aaFilter()" style="${inp}"></div>
+          <div><label style="${lbl}">Officer</label><select id="aa-officer" onchange="aaFilter()" style="${inp}"><option value="">All</option>${officerOpts.map(([id,name])=>`<option value="${id}">${escHtml(name)}</option>`).join('')}</select></div>
+          <div><label style="${lbl}">Incident Type</label><select id="aa-type" onchange="aaFilter()" style="${inp}"><option value="">All</option>${typeOpts.map(t=>`<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('')}</select></div>
+          <div><label style="${lbl}">Follow-up</label><select id="aa-fu" onchange="aaFilter()" style="${inp}"><option value="">All</option>${Object.entries(FU).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></div>
+          <button class="btn btn-ghost btn-sm" onclick="aaClear()">Clear</button>
+        </div>
+        <div id="aa-reviews-body"></div>
       </div>
+
       <div class="card" style="margin-top:16px;">
         <div class="card-header"><div class="card-title">Quick Links</div></div>
         <div style="padding:16px 20px;display:flex;gap:12px;flex-wrap:wrap;">
           <a href="roster.html" class="btn btn-secondary">Manage Roster</a>
-          <a href="content-kpi.html" class="btn btn-secondary">Edit KPIs</a>
+          <a href="content-kpi.html" class="btn btn-secondary">Incident Types &amp; KPIs</a>
+          <a href="delta-t.html" class="btn btn-secondary">Delta T</a>
           <a href="access-requests.html" class="btn btn-secondary">Access Requests</a>
         </div>
       </div>`;
+
+    aaRenderReviews();
   }
+
+  // Agency-admin review filtering (module-scoped so the inline handlers reach it)
+  let aaReviews = [];
+  function fuLabels() {
+    return { no_action:'No Action', commendation:'Commendation', coaching:'Coaching',
+             training:'Training', internal_affairs:'IA Notification', pip:'PIP' };
+  }
+  function aaRenderReviews() {
+    const g = id => (document.getElementById(id)?.value || '');
+    const from=g('aa-from'), to=g('aa-to'), off=g('aa-officer'), typ=g('aa-type'), fu=g('aa-fu');
+    const FU = fuLabels();
+    const rows = aaReviews.filter(r =>
+      (!from || (r.date && r.date >= from)) &&
+      (!to   || (r.date && r.date <= to)) &&
+      (!off  || r.officerId === off) &&
+      (!typ  || r.type === typ) &&
+      (!fu   || r.followUp === fu)
+    );
+    const body = document.getElementById('aa-reviews-body');
+    if (!body) return;
+    body.innerHTML = `
+      <div style="padding:8px 20px;font-size:12px;color:var(--text-muted);">Showing ${rows.length} of ${aaReviews.length}</div>
+      ${rows.length===0 ? emptyState('No matching reviews') : `<div class="table-container"><table class="atlas-table">
+        <thead><tr><th>Officer</th><th>Date</th><th>Incident Type</th><th>Score</th><th>Follow-up</th><th>Status</th></tr></thead>
+        <tbody>${rows.map(r=>`<tr onclick="location.href='review-detail.html?id=${r.id}'">
+          <td>${escHtml(r.officer)}</td>
+          <td style="color:var(--text-muted);font-size:13px;">${r.date?fmtDate(r.date):'—'}</td>
+          <td>${escHtml(r.type)}</td>
+          <td style="font-weight:600;color:${r.score==null?'var(--text-muted)':r.score>=80?'#16a34a':r.score>=65?'#d97706':'var(--danger)'}">${r.score!=null?Number(r.score).toFixed(1):'—'}</td>
+          <td>${r.followUp?`<span class="badge badge-muted">${FU[r.followUp]||r.followUp}</span>`:'—'}</td>
+          <td>${statusBadge(r.status)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`}`;
+  }
+  window.aaFilter = aaRenderReviews;
+  window.aaClear = function() {
+    ['aa-from','aa-to','aa-officer','aa-type','aa-fu'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    aaRenderReviews();
+  };
+  function escHtml(str){ return String(str==null?'':str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   // ════════════════════════════════════════════════════════════
   // SUPERVISOR

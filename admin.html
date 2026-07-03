@@ -390,6 +390,15 @@
     });
   });
 
+  // Agency management (create/activate/list all agencies) is Super Admin only.
+  // Agency admins never see other agencies — they land straight on Portal Users.
+  if (!isSuperAdmin) {
+    document.querySelector('.tab-btn[data-tab="agencies"]')?.style.setProperty('display','none');
+    document.getElementById('tab-agencies')?.classList.remove('active');
+    document.querySelector('.tab-btn[data-tab="users"]')?.classList.add('active');
+    document.getElementById('tab-users')?.classList.add('active');
+  }
+
   // ── AGENCIES ───────────────────────────────────────────
   async function loadAgencies() {
     const { data: agencies } = await supabase
@@ -690,16 +699,24 @@ VALUES (
 
   // Add user modal
   document.getElementById('add-user-btn').addEventListener('click', async () => {
-    // Load agencies for dropdown
-    const { data: agencies } = await supabase
-      .from('agencies').select('id, name').eq('is_active', true).order('name');
     const sel = document.getElementById('u-agency');
-    sel.innerHTML = '<option value="">— Select agency —</option>';
-    (agencies || []).forEach(a => {
-      const opt = document.createElement('option');
-      opt.value = a.id; opt.textContent = a.name;
-      sel.appendChild(opt);
-    });
+    if (isSuperAdmin) {
+      // Load all agencies for dropdown
+      const { data: agencies } = await supabase
+        .from('agencies').select('id, name').eq('is_active', true).order('name');
+      sel.innerHTML = '<option value="">— Select agency —</option>';
+      (agencies || []).forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.id; opt.textContent = a.name;
+        sel.appendChild(opt);
+      });
+      sel.disabled = false;
+    } else {
+      // Agency admins can only add users to their own agency
+      sel.innerHTML = `<option value="${profile.agency_id}">${escHtml(profile.agencies?.name || 'My Agency')}</option>`;
+      sel.value = profile.agency_id;
+      sel.disabled = true;
+    }
     document.getElementById('user-modal').classList.add('open');
     updateUserSql();
   });
@@ -753,7 +770,7 @@ VALUES (
     c.appendChild(t); setTimeout(() => t.remove(), 4500);
   }
 
-  await Promise.all([loadAgencies(), loadUsers()]);
+  await Promise.all([ isSuperAdmin ? loadAgencies() : Promise.resolve(), loadUsers() ]);
 </script>
 </body>
 </html>
