@@ -332,50 +332,6 @@
             <div class="form-group mt-4">
               <label>Disposition <span style="font-size:11px;color:var(--text-muted);">— select all that apply</span></label>
               <div id="disposition-list" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="arrest_made" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">Arrest Made / Taken into Custody</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="citation_issued" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">Citation / Summons Issued</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="verbal_warning" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">Verbal Warning</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="written_warning" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">Written Warning</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="field_release" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">Field Release — No Charges</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="report_filed" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">Report Filed</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="citizen_assist" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">Citizen Assist</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="transported_medical" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">Transported — Medical / Hospital</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="referred_other_agency" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">Referred to Other Agency / Unit</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="no_action_taken" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">No Action Taken / Unfounded</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
-                  <input type="checkbox" name="disposition" value="other" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
-                  <span style="font-size:13px;color:var(--text-secondary);">Other — See Notes</span>
-                </label>
               </div>
             </div>
           </div>
@@ -872,6 +828,17 @@ class OfficerSearch {
   }
 
   // ── Load incident types ─────────────────────────────────
+  // Baseline items this agency has removed (content_suppressions / patch-010).
+  async function getSuppressedIds(contentType) {
+    if (!reviewAgencyId) return new Set();
+    const { data } = await supabase
+      .from('content_suppressions')
+      .select('content_id')
+      .eq('agency_id', reviewAgencyId)
+      .eq('content_type', contentType);
+    return new Set((data || []).map(r => r.content_id));
+  }
+
   async function loadIncidentTypes() {
     const { data } = await supabase
       .from('incident_types')
@@ -880,13 +847,41 @@ class OfficerSearch {
       .eq('is_active', true)
       .order('display_order');
 
+    const suppressed = await getSuppressedIds('incident_type');
     const sel = document.getElementById('incident-type');
-    (data || []).forEach(t => {
+    (data || []).filter(t => !suppressed.has(t.id)).forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.id;
       opt.textContent = t.name;
       sel.appendChild(opt);
     });
+  }
+
+  // ── Load dispositions (baseline + agency, minus removed) ─
+  async function loadDispositions() {
+    let q = supabase
+      .from('disposition_types')
+      .select('id, code, label, is_global_default, agency_id')
+      .eq('is_active', true)
+      .order('display_order');
+    if (reviewAgencyId) {
+      q = q.or(`agency_id.eq.${reviewAgencyId},is_global_default.eq.true`);
+    } else {
+      q = q.eq('is_global_default', true);
+    }
+    const { data } = await q;
+    const suppressed = await getSuppressedIds('disposition');
+    const items = (data || []).filter(d =>
+      (d.is_global_default || d.agency_id === reviewAgencyId) && !suppressed.has(d.id)
+    );
+
+    const list = document.getElementById('disposition-list');
+    if (!list) return;
+    list.innerHTML = items.map(d => `
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--border-radius);border:1px solid var(--border);cursor:pointer;font-weight:400;">
+        <input type="checkbox" name="disposition" value="${d.code}" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);">
+        <span style="font-size:13px;color:var(--text-secondary);">${escHtml(d.label)}</span>
+      </label>`).join('') || '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No dispositions configured.</div>';
   }
 
   // ── Load universal KPIs + safety checklist on page load ──
@@ -900,9 +895,12 @@ class OfficerSearch {
       .eq('is_active', true)
       .order('display_order');
 
-    if (universalKpis?.length) {
+    const suppressedKpis = await getSuppressedIds('kpi');
+    const universalKpisEff = (universalKpis || []).filter(k => !suppressedKpis.has(k.id));
+
+    if (universalKpisEff.length) {
       const ul = document.getElementById('universal-kpi-list');
-      ul.innerHTML = universalKpis.map((k, i) => `
+      ul.innerHTML = universalKpisEff.map((k, i) => `
         <label style="display:flex;align-items:center;gap:12px;padding:12px 14px;
              background:var(--bg-elevated);border-radius:var(--border-radius);
              border:1.5px solid var(--border);cursor:pointer;transition:all var(--transition);"
@@ -929,10 +927,13 @@ class OfficerSearch {
         .order('category')
         .order('display_order');
 
-      if (safetyItems?.length) {
+      const suppressedSafety = await getSuppressedIds('safety_item');
+      const safetyItemsEff = (safetyItems || []).filter(it => !suppressedSafety.has(it.id));
+
+      if (safetyItemsEff.length) {
         const sl = document.getElementById('safety-list');
         const grouped = {};
-        safetyItems.forEach(item => {
+        safetyItemsEff.forEach(item => {
           const cat = item.category || 'General';
           if (!grouped[cat]) grouped[cat] = [];
           grouped[cat].push(item);
@@ -1009,9 +1010,10 @@ class OfficerSearch {
       .eq('is_active', true)
       .order('display_order');
 
-    // Only show global defaults + this agency's KPIs
+    // Only show global defaults + this agency's KPIs, minus any removed by the agency
+    const suppressedTypeKpis = await getSuppressedIds('kpi');
     const kpis = (allKpis || []).filter(k =>
-      k.is_global_default || k.agency_id === reviewAgencyId
+      (k.is_global_default || k.agency_id === reviewAgencyId) && !suppressedTypeKpis.has(k.id)
     );
 
     if (!kpis?.length) {
@@ -1310,7 +1312,7 @@ class OfficerSearch {
   }
 
   // ── Init ─────────────────────────────────────────────────
-  await Promise.all([loadOfficers(), loadIncidentTypes(), loadUniversalKpisAndSafety()]);
+  await Promise.all([loadOfficers(), loadIncidentTypes(), loadUniversalKpisAndSafety(), loadDispositions()]);
 </script>
 </body>
 </html>

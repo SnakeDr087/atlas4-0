@@ -59,6 +59,7 @@ const ROLE_PERMISSIONS = {
   // Content management
   'content-kpi.html':      ['super_admin','agency_admin'],
   'content-safety.html':   ['super_admin','agency_admin'],
+  'content-dispositions.html': ['super_admin','agency_admin'],
   'content-ranks.html':    ['super_admin','agency_admin']
 };
 

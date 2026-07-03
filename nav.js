@@ -63,6 +63,7 @@ function getNavItems(role) {
   const contentItems = [
     { label: 'Incident Types & KPIs', icon: 'content', href: '/content-kpi.html', key: 'content-kpi', roles: ['super_admin','agency_admin'] },
     { label: 'Safety Checklist', icon: 'content', href: '/content-safety.html', key: 'content-safety', roles: ['super_admin','agency_admin'] },
+    { label: 'Dispositions', icon: 'content', href: '/content-dispositions.html', key: 'content-dispositions', roles: ['super_admin','agency_admin'] },
     { label: 'Rank Structure', icon: 'content', href: '/content-ranks.html', key: 'content-ranks', roles: ['super_admin','agency_admin'] }
   ];
 

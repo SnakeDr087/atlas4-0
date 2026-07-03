@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS — Dispositions</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-content">
+    <header id="topbar" class="topbar"></header>
+    <main class="page-content">
+
+      <div class="page-header flex items-center justify-between">
+        <div>
+          <h1>Dispositions</h1>
+          <p>Outcome options shown on every BWC review. Each agency starts from the baseline and can tailor it.</p>
+        </div>
+        <button class="btn btn-primary" id="add-item-btn">+ Add Disposition</button>
+      </div>
+
+      <div class="card">
+        <div id="items-loading" style="display:flex;justify-content:center;padding:32px;"><div class="spinner"></div></div>
+        <div id="items-list" style="display:none;"></div>
+        <div id="add-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+          <div class="form-row" style="align-items:end;">
+            <div class="form-group" style="margin:0;">
+              <label>Disposition Label <span class="required">*</span></label>
+              <input type="text" id="new-item-text" placeholder="e.g. Mental Health Referral">
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary" id="save-item-btn">Add</button>
+              <button class="btn btn-ghost" id="cancel-item-btn">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="config.js"></script>
+<script type="module">
+  import { initAuth } from './auth.js';
+  import { renderNav, renderTopbar } from './nav.js';
+  import { supabase } from './supabase-client.js';
+
+  const { profile } = await initAuth({
+    requireAuth: true,
+    allowRoles: ['super_admin', 'agency_admin']
+  });
+  renderNav(profile, 'content-dispositions');
+  renderTopbar('Dispositions');
+
+  // Super Admin curates the platform-wide (baseline) dispositions; agency
+  // admins manage only their own agency's dispositions.
+  const canManageGlobals = profile.role === 'super_admin';
+
+  // Baseline dispositions this agency has removed. Suppression never applies
+  // to the Super Admin (they edit the master baseline directly).
+  async function getSuppressedIds() {
+    if (canManageGlobals) return new Set();
+    const { data } = await supabase
+      .from('content_suppressions')
+      .select('content_id')
+      .eq('agency_id', profile.agency_id)
+      .eq('content_type', 'disposition');
+    return new Set((data || []).map(r => r.content_id));
+  }
+
+  async function loadItems() {
+    let q = supabase
+      .from('disposition_types')
+      .select('id, code, label, is_active, is_global_default, agency_id')
+      .order('display_order');
+    if (canManageGlobals) {
+      q = q.eq('is_global_default', true);          // super admin curates the baseline
+    } else {
+      q = q.or(`agency_id.eq.${profile.agency_id},is_global_default.eq.true`);
+    }
+    const { data: items } = await q;
+    const suppressed = await getSuppressedIds();
+
+    document.getElementById('items-loading').style.display = 'none';
+    document.getElementById('items-list').style.display = 'block';
+
+    document.getElementById('items-list').innerHTML = (items || []).length
+      ? (items || []).map((item, i) => {
+          const isOwn = !item.is_global_default;
+          const canEdit = isOwn || canManageGlobals;   // edit own items, or baseline as Super Admin
+          const isSuppressed = item.is_global_default && !canManageGlobals && suppressed.has(item.id);
+          return `
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 0;
+               border-bottom:1px solid var(--border-subtle);opacity:${item.is_active && !isSuppressed ? 1 : 0.5};"
+               id="item-row-${item.id}">
+            <div style="color:var(--text-muted);font-size:12px;font-family:var(--font-mono);width:24px;">
+              ${i + 1}
+            </div>
+            <div style="flex:1;font-size:13px;color:var(--text-secondary);" id="item-text-${item.id}">
+              ${escHtml(item.label)}${isSuppressed
+                ? ' <span style="font-size:10px;color:var(--text-muted);">· Removed from your agency</span>'
+                : (item.is_global_default ? ' <span style="font-size:10px;color:var(--text-muted);">· Baseline</span>' : '')}
+            </div>
+            <div style="display:flex;gap:6px;">
+            ${canEdit ? `
+              <button class="btn btn-ghost btn-sm" onclick="editItem('${item.id}')">Edit</button>
+              <button class="btn btn-ghost btn-sm" onclick="toggleItem('${item.id}', ${item.is_active})">
+                ${item.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="deleteItem('${item.id}', '${item.code}')">Delete</button>`
+            : (isSuppressed
+                ? `<button class="btn btn-ghost btn-sm" onclick="restoreItem('${item.id}')">Restore</button>`
+                : `<button class="btn btn-ghost btn-sm" onclick="removeItem('${item.id}')">Remove</button>`)}
+            </div>
+          </div>`;
+        }).join('')
+      : '<div style="color:var(--text-muted);font-size:13px;padding:16px 0;">No dispositions yet. Add some above.</div>';
+  }
+
+  // Remove / restore a baseline disposition for this agency (suppression, no copy)
+  window.removeItem = async function(itemId) {
+    const { error } = await supabase.from('content_suppressions')
+      .insert({ agency_id: profile.agency_id, content_type: 'disposition', content_id: itemId });
+    if (error) { showToast('error', 'Failed', error.message); return; }
+    showToast('success', 'Removed from your agency');
+    await loadItems();
+  };
+
+  window.restoreItem = async function(itemId) {
+    const { error } = await supabase.from('content_suppressions').delete()
+      .eq('agency_id', profile.agency_id).eq('content_type', 'disposition').eq('content_id', itemId);
+    if (error) { showToast('error', 'Failed', error.message); return; }
+    showToast('success', 'Restored');
+    await loadItems();
+  };
+
+  document.getElementById('add-item-btn').addEventListener('click', () => {
+    document.getElementById('add-form').style.display = 'block';
+    document.getElementById('new-item-text').focus();
+  });
+  document.getElementById('cancel-item-btn').addEventListener('click', () => {
+    document.getElementById('add-form').style.display = 'none';
+    document.getElementById('new-item-text').value = '';
+  });
+
+  // Build a storage code from a label. The code is what gets saved on a
+  // review, so it must be stable and unique. Agency codes get a short random
+  // suffix so they never collide with a baseline code or another agency's.
+  function makeCode(label) {
+    const base = String(label).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40) || 'disposition';
+    return canManageGlobals ? base : `${base}_${Math.random().toString(36).slice(2,6)}`;
+  }
+
+  document.getElementById('save-item-btn').addEventListener('click', async () => {
+    const label = document.getElementById('new-item-text').value.trim();
+    if (!label) return;
+    const { data: last } = await supabase.from('disposition_types')
+      .select('display_order')
+      .order('display_order', { ascending: false }).limit(1).maybeSingle();
+    const { error } = await supabase.from('disposition_types').insert({
+      agency_id: canManageGlobals ? null : profile.agency_id,
+      is_global_default: canManageGlobals,
+      code: makeCode(label),
+      label,
+      display_order: (last?.display_order || 0) + 1
+    });
+    if (error) { showToast('error', 'Failed', error.message); return; }
+    document.getElementById('new-item-text').value = '';
+    document.getElementById('add-form').style.display = 'none';
+    showToast('success', 'Disposition added');
+    await loadItems();
+  });
+
+  // Edit the label only — the code is immutable so historical reviews that
+  // stored that code stay readable.
+  window.editItem = function(itemId) {
+    const textEl = document.getElementById(`item-text-${itemId}`);
+    if (!textEl) return;
+    const current = textEl.textContent.replace(/·.*$/, '').trim();
+    textEl.innerHTML = `
+      <input type="text" value="${escAttr(current)}" id="edit-input-${itemId}"
+             style="width:100%;background:var(--bg-base);border:1px solid var(--border-focus);
+             border-radius:var(--border-radius);padding:6px 8px;color:var(--text-primary);">
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button class="btn btn-primary btn-sm" onclick="saveEdit('${itemId}')">Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadItems()">Cancel</button>
+      </div>`;
+    document.getElementById(`edit-input-${itemId}`).focus();
+  };
+
+  window.saveEdit = async function(itemId) {
+    const label = document.getElementById(`edit-input-${itemId}`).value.trim();
+    if (!label) return;
+    await supabase.from('disposition_types').update({ label }).eq('id', itemId);
+    showToast('success', 'Disposition updated');
+    await loadItems();
+  };
+
+  // Hard delete — blocked if any review recorded this disposition code,
+  // otherwise that review would show an outcome that no longer exists.
+  // Substring matches are filtered out client-side (codes can be substrings
+  // of one another, e.g. 'other' inside 'referred_other_agency'). Fails closed.
+  window.deleteItem = async function(itemId, code) {
+    const { data: rows, error: useErr } = await supabase
+      .from('bwc_reviews')
+      .select('disposition')
+      .ilike('disposition', `%${code}%`)
+      .limit(50);
+    if (useErr) {
+      showToast('error', 'Could not verify usage', 'Deletion blocked. Deactivate it instead.');
+      return;
+    }
+    const inUse = (rows || []).some(r => (r.disposition || '').split(',').includes(code));
+    if (inUse) {
+      showToast('error', 'In use', 'This disposition appears on existing reviews. Deactivate it instead of deleting.');
+      return;
+    }
+    if (!confirm('Delete this disposition? This cannot be undone.')) return;
+    const { error } = await supabase.from('disposition_types').delete().eq('id', itemId);
+    if (error) { showToast('error', 'Delete failed', error.message); return; }
+    showToast('success', 'Disposition deleted');
+    await loadItems();
+  };
+
+  window.toggleItem = async function(itemId, isActive) {
+    await supabase.from('disposition_types').update({ is_active: !isActive }).eq('id', itemId);
+    await loadItems();
+    showToast('success', isActive ? 'Disposition deactivated' : 'Disposition activated');
+  };
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');
+  }
+  function escAttr(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function showToast(type, title) {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<div class="toast-content"><div class="toast-title">${title}</div></div>`;
+    c.appendChild(t); setTimeout(() => t.remove(), 3000);
+  }
+
+  await loadItems();
+</script>
+</body>
+</html>

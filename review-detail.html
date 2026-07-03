@@ -299,8 +299,22 @@
 
   // Incident
   set('d-incident-type', review.incident_type?.name || '—');
+
+  // Disposition: stored as comma-joined codes; label each from the table
+  // (baseline + this agency's), falling back to a title-cased code.
+  let dispMapDetail = {};
+  {
+    let dq = supabase.from('disposition_types').select('code, label');
+    dq = review.agency_id
+      ? dq.or(`agency_id.eq.${review.agency_id},is_global_default.eq.true`)
+      : dq.eq('is_global_default', true);
+    const { data: dt } = await dq;
+    (dt || []).forEach(d => { dispMapDetail[d.code] = d.label; });
+  }
+  const dispLabelDetail = v => dispMapDetail[v]
+    || v.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
   set('d-disposition', review.disposition
-    ? review.disposition.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())
+    ? review.disposition.split(',').filter(Boolean).map(dispLabelDetail).join(', ')
     : '—');
 
   // Outcome sidebar

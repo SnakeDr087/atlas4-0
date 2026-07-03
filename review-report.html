@@ -170,6 +170,18 @@
     throw error;
   }
 
+  // Disposition label map (baseline + this agency's), so agency-custom
+  // dispositions show their proper label. Falls back to the static map below.
+  const dispMap = {};
+  {
+    let dq = supabase.from('disposition_types').select('code, label');
+    dq = review.agency_id
+      ? dq.or(`agency_id.eq.${review.agency_id},is_global_default.eq.true`)
+      : dq.eq('is_global_default', true);
+    const { data: dt } = await dq;
+    (dt || []).forEach(d => { dispMap[d.code] = d.label; });
+  }
+
   // Load KPI responses
   let kpiRows = [];
   if (review.kpi_responses && Object.keys(review.kpi_responses).length) {
@@ -222,6 +234,7 @@
     return 'rpt-result-na';
   }
   function dispLabel(v) {
+    if (dispMap[v]) return dispMap[v];
     const map = {
       arrest_made:'Arrest Made', citation_issued:'Citation Issued', verbal_warning:'Verbal Warning',
       written_warning:'Written Warning', field_release:'Field Release', report_filed:'Report Filed',
